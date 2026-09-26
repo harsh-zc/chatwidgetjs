@@ -167,6 +167,35 @@
     return config.apiBaseUrl + "/chat-widgets/" + encodeURIComponent(config.chatWidgetId) + "/tickets";
   }
 
+  /** Name/Email/Subject/Description — owned by chat flow, never ask-fields. */
+  function isManagedAskFieldRef(fieldRef) {
+    var key = String(fieldRef || "")
+      .replace(/^FORM_TICKET\./i, "")
+      .trim()
+      .toLowerCase();
+    return (
+      key === "email" ||
+      key === "name" ||
+      key === "fullname" ||
+      key === "contactname" ||
+      key === "phone" ||
+      key === "phonenumber" ||
+      key === "requesteremail" ||
+      key === "requestername" ||
+      key === "subject" ||
+      key === "description"
+    );
+  }
+
+  function isAskCustomerField(field) {
+    return (
+      field &&
+      field.source === "ask_customer" &&
+      field.fieldRef &&
+      !isManagedAskFieldRef(field.fieldRef)
+    );
+  }
+
   function normalizeTicketDetails(raw) {
     if (!Array.isArray(raw)) return [];
     return raw.map(function (item) {
@@ -379,8 +408,9 @@
   var CLOSE_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   var SEND_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var BACK_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  var TICKETS_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0z" stroke="currentColor" stroke-width="2"/><path d="M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  var TICKETS_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 5v2M13 17v2M13 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   var PLUS_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
+  var ROTATE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3v5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   function css(color, isLeft) {
     return [
@@ -393,20 +423,49 @@
       "#desk-cw-header{display:flex;align-items:center;gap:8px;padding:10px 12px;color:#fff;background:" + color + "}",
       "#desk-cw-avatar,#desk-cw-back,#desk-cw-tickets-btn{display:inline-flex;height:28px;width:28px;align-items:center;justify-content:center;border-radius:999px;background:rgb(255 255 255 / .2);font-size:12px;font-weight:600;border:0;color:#fff;cursor:pointer;flex-shrink:0}",
       "#desk-cw-back{display:none}",
+      "#desk-cw-resolve-actions{display:none;flex-shrink:0;align-items:center;gap:6px}",
+      "#desk-cw-resolve,#desk-cw-resolve-cancel,#desk-cw-resolve-close{flex-shrink:0;cursor:pointer;border:0;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:600;color:#fff}",
+      "#desk-cw-resolve{background:rgb(255 255 255 / .2)}",
+      "#desk-cw-resolve:hover{background:rgb(255 255 255 / .3)}",
+      "#desk-cw-resolve-cancel{display:none;background:rgb(255 255 255 / .15)}",
+      "#desk-cw-resolve-cancel:hover{background:rgb(255 255 255 / .25)}",
+      "#desk-cw-resolve-close{display:none;background:#fff;color:" + color + "}",
+      "#desk-cw-resolve-close:hover{background:#f8fafc}",
       "#desk-cw-header-copy{min-width:0;flex:1}",
       "#desk-cw-title{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}",
       "#desk-cw-tagline{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:rgb(255 255 255 / .8)}",
-      "#desk-cw-chat,#desk-cw-ticket,#desk-cw-tickets-list{min-height:0;flex:1;overflow-y:auto}",
+      "#desk-cw-latest-banner{display:none;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0;background:#f8fafc;padding:8px 12px}",
+      "#desk-cw-latest-banner.open{display:flex}",
+      "#desk-cw-latest-link{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;font:inherit;font-size:12px;color:#475569}",
+      "#desk-cw-latest-link:hover{color:#0f172a}",
+      "#desk-cw-latest-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      "#desk-cw-latest-new{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;color:" + color + "}",
+      "#desk-cw-latest-new:hover{background:#f8fafc}",
+      "#desk-cw-chat,#desk-cw-ticket,#desk-cw-tickets-list,#desk-cw-thread{min-height:0;flex:1;overflow-y:auto}",
       "#desk-cw-chat{background:#f8fafc;padding:10px;display:flex;flex-direction:column;gap:8px}",
-      "#desk-cw-ticket,#desk-cw-tickets-list{display:none;background:#fff;padding:12px}",
+      "#desk-cw-ticket,#desk-cw-tickets-list,#desk-cw-thread{display:none;background:#fff;padding:12px}",
       "#desk-cw-ticket.open,#desk-cw-tickets-list.open{display:block}",
-      "#desk-cw-chat.hidden,#desk-cw-form-wrap.hidden{display:none}",
+      "#desk-cw-thread.open{display:flex;flex-direction:column;gap:12px;background:#fff;padding:12px}",
+      "#desk-cw-chat.hidden,#desk-cw-form-wrap.hidden,#desk-cw-powered.hidden{display:none}",
       ".desk-cw-row{display:flex}.desk-cw-row.user{justify-content:flex-end}.desk-cw-row.bot{justify-content:flex-start}",
       ".desk-cw-bubble{max-width:80%;border-radius:14px;padding:7px 10px;font-size:13px;line-height:1.35;margin:0;word-break:break-word}",
       ".desk-cw-bubble.bot{border-bottom-left-radius:6px;background:#fff;color:#1e293b;box-shadow:0 1px 2px rgb(15 23 42 / .06)}",
       ".desk-cw-bubble.user{border-bottom-right-radius:6px;background:" + color + ";color:#fff}",
-      "#desk-cw-raise{align-self:flex-start;cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:10px;padding:7px 10px;font-size:13px;font-weight:500;color:" + color + ";box-shadow:0 1px 2px rgb(15 23 42 / .06)}",
-      "#desk-cw-ticket-heading,#desk-cw-tickets-heading{margin:0;font-size:13px;font-weight:600;color:" + color + "}",
+      ".desk-cw-thread-day{display:flex;align-items:center;gap:8px;padding:4px 0}",
+      ".desk-cw-thread-day:before,.desk-cw-thread-day:after{content:'';flex:1;height:1px;background:#e2e8f0}",
+      ".desk-cw-thread-day span{font-size:10px;font-weight:600;letter-spacing:.04em;color:#94a3b8}",
+      ".desk-cw-thread-msg{display:flex;flex-direction:column}",
+      ".desk-cw-thread-msg.user{align-items:flex-end}",
+      ".desk-cw-thread-msg.bot{align-items:flex-start}",
+      ".desk-cw-thread-body{max-width:85%}",
+      ".desk-cw-thread-bubble{border-radius:14px;padding:8px 12px;font-size:13px;line-height:1.35;margin:0;word-break:break-word}",
+      ".desk-cw-thread-msg.bot .desk-cw-thread-bubble{border-bottom-left-radius:6px;border:1px solid #e2e8f0;background:#fff;color:#1e293b}",
+      ".desk-cw-thread-msg.user .desk-cw-thread-bubble{border-bottom-right-radius:6px;background:" + color + ";color:#fff}",
+      ".desk-cw-thread-bubble-text{margin:0}",
+      ".desk-cw-thread-time{margin:6px 0 0;font-size:10px;line-height:1;text-align:right}",
+      ".desk-cw-thread-msg.bot .desk-cw-thread-time{color:#94a3b8}",
+      ".desk-cw-thread-msg.user .desk-cw-thread-time{color:rgb(255 255 255 / .7)}",
+      "#desk-cw-tickets-heading{margin:0;font-size:13px;font-weight:600;color:" + color + "}",
       ".desk-cw-tickets-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px}",
       "#desk-cw-tickets-new{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:600;color:" + color + "}",
       "#desk-cw-tickets-new:hover{background:#f8fafc}",
@@ -414,12 +473,21 @@
       "#desk-cw-tickets-empty{margin:0;font-size:13px;color:#64748b;line-height:1.4}",
       ".desk-cw-ticket-card{display:block;width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#f8fafc;text-align:left;cursor:pointer;font:inherit}",
       ".desk-cw-ticket-card:hover{background:#f1f5f9}",
-      ".desk-cw-ticket-card-title{margin:0 0 4px;font-size:13px;font-weight:600;color:#1e293b}",
-      ".desk-cw-ticket-card-meta{margin:0;font-size:11px;color:#64748b}",
-      ".desk-cw-ticket-card-number{margin:0 0 4px;font-size:11px;font-weight:600;color:" + color + "}",
-      ".desk-cw-ticket-detail{border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#f8fafc}",
-      ".desk-cw-ticket-detail-label{margin:0;font-size:11px;font-weight:600;color:#64748b}",
-      ".desk-cw-ticket-detail-value{margin:6px 0 0;font-size:13px;color:#1e293b;white-space:pre-wrap;word-break:break-word}",
+      ".desk-cw-ticket-card-subject{margin:0;font-size:13px;font-weight:600;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".desk-cw-ticket-card-desc{margin:4px 0 0;font-size:12px;line-height:1.35;color:#64748b;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
+      ".desk-cw-ticket-card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 0}",
+      ".desk-cw-ticket-card-number{margin:0;font-size:11px;font-weight:600;color:" + color + ";overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".desk-cw-ticket-card-time{margin:0;flex-shrink:0;font-size:11px;color:#94a3b8}",
+      "#desk-cw-closed-actions{display:none;flex-direction:column;gap:8px;border-top:1px solid #e2e8f0;background:#fff;padding:12px}",
+      "#desk-cw-closed-actions.open{display:flex}",
+      "#desk-cw-closed-btns{display:flex;gap:8px}",
+      "#desk-cw-reopen{display:inline-flex;min-width:0;flex:1;align-items:center;justify-content:center;gap:6px;cursor:pointer;border:1px solid " + color + ";border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;color:" + color + ";background:#fff}",
+      "#desk-cw-reopen:hover{filter:brightness(.97)}",
+      "#desk-cw-reopen svg{flex-shrink:0}",
+      "#desk-cw-new-chat{min-width:0;flex:1;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;color:#fff;background:" + color + "}",
+      "#desk-cw-new-chat:hover{filter:brightness(1.05)}",
+      "#desk-cw-powered{display:none;margin:0;padding:0 8px 8px;text-align:center;font-size:10px;color:#94a3b8;background:#fff}",
+      "#desk-cw-powered.open{display:block}",
       ".desk-cw-field{display:block;margin-bottom:14px}",
       ".desk-cw-field>span{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:#475569}",
       ".desk-cw-field .req{display:inline;color:#f43f5e}",
@@ -435,11 +503,13 @@
       ".desk-cw-dd{position:relative}.desk-cw-dd-trigger{display:flex;width:100%;box-sizing:border-box;align-items:center;justify-content:space-between;gap:8px;height:40px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;background:#fff;color:#1e293b;font-size:14px;line-height:1.4;cursor:pointer;box-shadow:0 1px 2px rgb(15 23 42 / .05);text-align:left;outline:none;transition:border-color .15s ease,box-shadow .15s ease}.desk-cw-dd-face{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.desk-cw-dd-face.is-placeholder{color:#94a3b8}.desk-cw-dd-chevron{color:#94a3b8;flex-shrink:0;font-size:12px}.desk-cw-date-icon{color:#94a3b8;flex-shrink:0}.desk-cw-field.invalid .desk-cw-dd-trigger{border-color:#fb7185}.desk-cw-dd-menu{position:fixed;z-index:2147483646;box-sizing:border-box;max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 12px 24px rgb(15 23 42 / .16);padding:4px}.desk-cw-dd-item,.desk-cw-dd-check{display:flex;width:100%;box-sizing:border-box;align-items:center;gap:8px;border:0;background:transparent;border-radius:8px;padding:8px 12px;font-size:14px;color:#334155;cursor:pointer;text-align:left}.desk-cw-dd-item:hover,.desk-cw-dd-check:hover{background:#f1f5f9}.desk-cw-dd-item.is-active{color:#fff;background:var(--desk-cw-accent)}.desk-cw-dd-box{display:inline-flex;width:16px;height:16px;flex-shrink:0;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:10px;color:#fff}.desk-cw-dd-check.is-checked .desk-cw-dd-box{border-color:transparent;background:var(--desk-cw-accent)}.desk-cw-dd-check.is-checked .desk-cw-dd-box:after{content:\"✓\"}.desk-cw-empty{margin:0;padding:8px 12px;font-size:12px;color:#94a3b8}.desk-cw-date-menu{width:280px;max-height:none;overflow:hidden;padding:12px}.desk-cw-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.desk-cw-cal-title{margin:0;font-size:14px;font-weight:600;color:#1e293b}.desk-cw-cal-nav{display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#64748b;cursor:pointer}.desk-cw-cal-nav:hover{background:#f1f5f9}.desk-cw-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0}.desk-cw-cal-dow{padding:6px 0;text-align:center;font-size:11px;font-weight:500;color:#94a3b8}.desk-cw-cal-day{display:inline-flex;width:32px;height:32px;margin:0 auto;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#334155;font-size:13px;cursor:pointer}.desk-cw-cal-day:hover{background:#f1f5f9}.desk-cw-cal-day.is-active{color:#fff;background:var(--desk-cw-accent);font-weight:600}.desk-cw-cal-day.is-today:not(.is-active){box-shadow:inset 0 0 0 1px #cbd5e1}.desk-cw-time-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:8px 10px;border-radius:16px;background:#f8fafc}.desk-cw-time-label{font-size:12px;font-weight:500;color:#64748b}.desk-cw-time-controls{display:flex;align-items:center;gap:4px}.desk-cw-time-group{display:flex;align-items:center;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.desk-cw-time-btn{display:inline-flex;width:28px;height:32px;align-items:center;justify-content:center;border:0;background:transparent;color:#64748b;cursor:pointer}.desk-cw-time-btn:hover{background:#f8fafc}.desk-cw-time-val{width:28px;text-align:center;font-size:13px;font-weight:600;color:#1e293b}.desk-cw-cal-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px}.desk-cw-cal-link{border:0;background:transparent;padding:6px 8px;border-radius:8px;font-size:12px;font-weight:500;color:#64748b;cursor:pointer}.desk-cw-cal-link:hover{background:#f1f5f9;color:#1e293b}.desk-cw-cal-done{border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:var(--desk-cw-accent);cursor:pointer}.desk-cw-tags{position:relative}.desk-cw-tags-box{display:flex;width:100%;box-sizing:border-box;min-height:40px;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid #e2e8f0;border-radius:12px;padding:6px 8px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05);cursor:text}.desk-cw-field.invalid .desk-cw-tags-box{border-color:#fb7185}.desk-cw-tags-box.is-focus{border-color:#94a3b8}.desk-cw-tags-chips{display:contents}.desk-cw-tag-chip{display:inline-flex;max-width:100%;align-items:center;gap:4px;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:500;color:#fff;background:var(--desk-cw-accent)}.desk-cw-tag-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.desk-cw-tag-x{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgb(255 255 255 / .2);color:#fff;font-size:11px;line-height:1;cursor:pointer;padding:0}.desk-cw-tags-input{min-width:7rem;flex:1;border:0;outline:none;background:transparent;font-family:inherit;font-size:14px;line-height:1.4;color:#1e293b;padding:2px 4px}.desk-cw-tags-input::placeholder{color:#94a3b8}.desk-cw-tags-menu{position:fixed;z-index:2147483646;box-sizing:border-box;max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 12px 24px rgb(15 23 42 / .16);padding:4px}.desk-cw-tags-item{display:flex;width:100%;box-sizing:border-box;border:0;background:transparent;border-radius:8px;padding:8px 12px;font-size:14px;color:#334155;cursor:pointer;text-align:left}.desk-cw-tags-item:hover{background:#f1f5f9}.desk-cw-tags-item.is-hidden{display:none}.desk-cw-radio{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05)}.desk-cw-field.invalid .desk-cw-radio{border-color:#fb7185}.desk-cw-radio-option{position:relative;display:flex;align-items:center;gap:10px;font-size:14px;color:#334155;cursor:pointer}.desk-cw-radio-option input{position:absolute;opacity:0;width:1px;height:1px;margin:0;overflow:hidden;clip:rect(0,0,0,0)}.desk-cw-radio-dot{display:inline-flex;width:16px;height:16px;flex-shrink:0;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:999px;background:#fff}.desk-cw-radio-option input:checked + .desk-cw-radio-dot{border-color:transparent;background:var(--desk-cw-accent);box-shadow:inset 0 0 0 3px #fff}.desk-cw-radio .desk-cw-empty{margin:0;padding:0;font-size:12px;color:#94a3b8}.desk-cw-field textarea{min-height:84px;resize:none}",
       "#desk-cw-submit{width:100%;margin-top:8px;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600;color:#fff;background:" + color + ";box-shadow:0 4px 10px " + color + "40}",
       "#desk-cw-submit:hover{filter:brightness(1.05)}",
-      "#desk-cw-back,#desk-cw-send,#desk-cw-launcher,#desk-cw-tickets-btn,#desk-cw-tickets-new{cursor:pointer}",
+      "#desk-cw-back,#desk-cw-send,#desk-cw-launcher,#desk-cw-tickets-btn,#desk-cw-tickets-new,#desk-cw-latest-new,#desk-cw-latest-link,#desk-cw-resolve,#desk-cw-resolve-cancel,#desk-cw-resolve-close,#desk-cw-reopen,#desk-cw-new-chat{cursor:pointer}",
       "#desk-cw-form-wrap{display:flex;align-items:center;gap:8px;border-top:1px solid #e2e8f0;background:#fff;padding:8px}",
       "#desk-cw-input{min-width:0;flex:1;height:36px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-family:inherit;font-size:14px;line-height:1.4;outline:none;cursor:text;box-shadow:0 1px 2px rgb(15 23 42 / .05);background:#fff;color:#1e293b}",
       "#desk-cw-input:focus,#desk-cw-input:focus-visible{border-color:#94a3b8;box-shadow:0 1px 2px rgb(15 23 42 / .05)}",
+      "#desk-cw-input:disabled{cursor:default;background:#f8fafc}",
       "#desk-cw-send{display:inline-flex;height:36px;width:36px;align-items:center;justify-content:center;border:0;border-radius:12px;background:" + color + ";color:#fff;cursor:pointer}",
+      "#desk-cw-send:disabled{cursor:default;opacity:.5}",
       "#desk-cw-launcher{pointer-events:auto;display:inline-flex;height:" + "48px" + ";width:" + "48px" + ";align-items:center;justify-content:center;border:0;border-radius:999px;background:" + color + ";color:#fff;box-shadow:0 10px 15px -3px rgb(15 23 42 / .2),0 4px 6px -4px rgb(15 23 42 / .12);transition:transform .15s ease}",
       "#desk-cw-launcher:hover{transform:scale(1.05)}",
     ].join("");
@@ -495,28 +565,46 @@
       '<button type="button" id="desk-cw-back" aria-label="Back">' + BACK_ICON + "</button>" +
       '<span id="desk-cw-avatar"></span>' +
       '<div id="desk-cw-header-copy"><p id="desk-cw-title"></p><p id="desk-cw-tagline"></p></div>' +
-      '<button type="button" id="desk-cw-tickets-btn" aria-label="My tickets" title="My tickets">' + TICKETS_ICON + "</button>" +
+      '<div id="desk-cw-resolve-actions">' +
+      '<button type="button" id="desk-cw-resolve">Mark resolved</button>' +
+      '<button type="button" id="desk-cw-resolve-cancel">Cancel</button>' +
+      '<button type="button" id="desk-cw-resolve-close">Close</button>' +
+      "</div>" +
+      '<button type="button" id="desk-cw-tickets-btn" aria-label="My requests" title="My requests">' + TICKETS_ICON + "</button>" +
       "</header>" +
+      '<div id="desk-cw-latest-banner">' +
+      '<button type="button" id="desk-cw-latest-link"><span id="desk-cw-latest-text"></span></button>' +
+      '<button type="button" id="desk-cw-latest-new">' + PLUS_ICON + "New</button>" +
+      "</div>" +
       '<div id="desk-cw-chat"></div>' +
       '<div id="desk-cw-tickets-list">' +
       '<div class="desk-cw-tickets-toolbar">' +
-      '<p id="desk-cw-tickets-heading">Your tickets</p>' +
-      '<button type="button" id="desk-cw-tickets-new">' + PLUS_ICON + "Add new</button>" +
+      '<p id="desk-cw-tickets-heading">My requests</p>' +
+      '<button type="button" id="desk-cw-tickets-new">' + PLUS_ICON + "New</button>" +
       "</div>" +
       '<div id="desk-cw-tickets-items"></div>' +
       "</div>" +
       '<div id="desk-cw-ticket">' +
-      '<p id="desk-cw-ticket-heading">Raise a request</p>' +
-      '<label class="desk-cw-field" data-error-for="name"><span>Name <span class="req">*</span></span><input id="desk-cw-name" type="text" name="name" autocomplete="name" placeholder="e.g. Aditi Sharma" /><p class="desk-cw-error" data-error-msg="name" hidden></p></label>' +
-      '<label class="desk-cw-field" data-error-for="email"><span>Email <span class="req">*</span></span><input id="desk-cw-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" /><p class="desk-cw-error" data-error-msg="email" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-name-field" data-error-for="name"><span>Name <span class="req">*</span></span><input id="desk-cw-name" type="text" name="name" autocomplete="name" placeholder="e.g. Aditi Sharma" /><p class="desk-cw-error" data-error-msg="name" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-email-field" data-error-for="email"><span>Email <span class="req">*</span></span><input id="desk-cw-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" /><p class="desk-cw-error" data-error-msg="email" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-description-field" data-error-for="description"><span>Description <span class="req">*</span></span><textarea id="desk-cw-description" rows="3" placeholder="Add more details..."></textarea><p class="desk-cw-error" data-error-msg="description" hidden></p></label>' +
       '<div id="desk-cw-ask-fields">' + "" + '</div>' +
       '<p id="desk-cw-submit-status" class="desk-cw-error" hidden style="display:none;margin:0 0 8px"></p>' +
       '<button type="button" id="desk-cw-submit">Submit request</button>' +
       "</div>" +
+      '<div id="desk-cw-thread"></div>' +
       '<form id="desk-cw-form-wrap">' +
       '<input id="desk-cw-input" type="text" placeholder="Type a message..." autocomplete="off" />' +
       '<button type="submit" id="desk-cw-send" aria-label="Send">' + SEND_ICON + "</button>" +
-      "</form></div>" +
+      "</form>" +
+      '<div id="desk-cw-closed-actions">' +
+      '<div id="desk-cw-closed-btns">' +
+      '<button type="button" id="desk-cw-reopen">' + ROTATE_ICON + "Reopen request</button>" +
+      '<button type="button" id="desk-cw-new-chat">Start a new chat</button>' +
+      "</div>" +
+      "</div>" +
+      '<p id="desk-cw-powered">Powered by Zeal Desk</p>' +
+      "</div>" +
       '<button type="button" id="desk-cw-launcher" aria-label="Open chat" aria-expanded="false">' + CHAT_ICON + "</button>" +
       "</div>";
 
@@ -526,26 +614,51 @@
     var launcher = document.getElementById("desk-cw-launcher");
     var backBtn = document.getElementById("desk-cw-back");
     var ticketsBtn = document.getElementById("desk-cw-tickets-btn");
+    var resolveActions = document.getElementById("desk-cw-resolve-actions");
+    var resolveBtn = document.getElementById("desk-cw-resolve");
+    var resolveCancelBtn = document.getElementById("desk-cw-resolve-cancel");
+    var resolveCloseBtn = document.getElementById("desk-cw-resolve-close");
+    var closedActions = document.getElementById("desk-cw-closed-actions");
+    var reopenBtn = document.getElementById("desk-cw-reopen");
+    var newChatBtn = document.getElementById("desk-cw-new-chat");
     var avatar = document.getElementById("desk-cw-avatar");
+    var titleEl = document.getElementById("desk-cw-title");
+    var taglineEl = document.getElementById("desk-cw-tagline");
     var chatEl = document.getElementById("desk-cw-chat");
     var ticketEl = document.getElementById("desk-cw-ticket");
+    var threadEl = document.getElementById("desk-cw-thread");
     var ticketsListEl = document.getElementById("desk-cw-tickets-list");
     var ticketsItemsEl = document.getElementById("desk-cw-tickets-items");
     var formWrap = document.getElementById("desk-cw-form-wrap");
+    var poweredEl = document.getElementById("desk-cw-powered");
+    var latestBanner = document.getElementById("desk-cw-latest-banner");
+    var latestLink = document.getElementById("desk-cw-latest-link");
+    var latestText = document.getElementById("desk-cw-latest-text");
+    var latestNewBtn = document.getElementById("desk-cw-latest-new");
+    var nameField = document.getElementById("desk-cw-name-field");
+    var emailField = document.getElementById("desk-cw-email-field");
     var input = document.getElementById("desk-cw-input");
+    var sendBtn = document.getElementById("desk-cw-send");
     var nameInput = document.getElementById("desk-cw-name");
     var emailInput = document.getElementById("desk-cw-email");
+    var descriptionInput = document.getElementById("desk-cw-description");
     var submitBtn = document.getElementById("desk-cw-submit");
-    var raiseBtn = null;
     var open = false;
     var view = "chat";
+    var composerMode = "chat";
+    var pendingSubject = "";
+    var skipIdentityFields = false;
+    var closingConfirm = false;
     var selectedTicketId = null;
+    var widgetTitle = config.title;
+    var widgetTagline = config.tagline;
     var storagePrefix = "desk_cw_" + String(config.key || "default").trim();
     var identityKey = storagePrefix + "_identity";
     var chatHistoryKey = storagePrefix + "_chat";
     var ticketsKey = storagePrefix + "_tickets";
     var MAX_CHAT_MESSAGES = 50;
     var MAX_STORED_TICKETS = 20;
+    var MAX_TICKET_MESSAGES = 100;
     var ticketsHeadingEl = document.getElementById("desk-cw-tickets-heading");
     var ticketsNewBtn = document.getElementById("desk-cw-tickets-new");
 
@@ -592,7 +705,7 @@
 
     document.getElementById("desk-cw-title").textContent = config.title;
     document.getElementById("desk-cw-tagline").textContent = config.tagline;
-    avatar.textContent = (config.title.slice(0, 1) || "S").toUpperCase();
+    avatar.textContent = (config.title.slice(0, 1) || "S").toUpperCase() + (config.title.slice(1, 2) || "").toLowerCase();
 
     function readJsonStorage(key, fallback) {
       try {
@@ -652,14 +765,95 @@
             })
             .filter(Boolean)
         : [];
+      var messages = Array.isArray(ticket.messages)
+        ? ticket.messages
+            .map(function (msg, index) {
+              if (!msg || typeof msg !== "object") return null;
+              var role = msg.role === "user" ? "user" : msg.role === "bot" ? "bot" : null;
+              var text = String(msg.text || "").trim();
+              if (!role || !text) return null;
+              return {
+                id: String(msg.id || role + "-" + index),
+                role: role,
+                text: text,
+                at: typeof msg.at === "string" ? msg.at : new Date().toISOString(),
+              };
+            })
+            .filter(Boolean)
+            .slice(-MAX_TICKET_MESSAGES)
+        : [];
       list.unshift({
         ticketId: String(ticket.ticketId),
         ticketNumber: ticket.ticketNumber ? String(ticket.ticketNumber) : "",
         subject: ticket.subject ? String(ticket.subject) : "",
+        description: ticket.description ? String(ticket.description) : "",
         createdAt: ticket.createdAt || new Date().toISOString(),
+        status: ticket.status === "resolved" ? "resolved" : "open",
         details: details,
+        messages: messages,
       });
       writeJsonStorage(ticketsKey, list.slice(0, MAX_STORED_TICKETS));
+    }
+
+    function updateCreatedTicket(ticketId, patch) {
+      var id = String(ticketId || "").trim();
+      if (!id) return loadCreatedTickets();
+      var list = loadCreatedTickets().map(function (ticket) {
+        if (!ticket || String(ticket.ticketId) !== id) return ticket;
+        var next = Object.assign({}, ticket, patch || {}, { ticketId: id });
+        if (patch && Object.prototype.hasOwnProperty.call(patch, "messages")) {
+          next.messages = Array.isArray(patch.messages)
+            ? patch.messages.slice(-MAX_TICKET_MESSAGES)
+            : [];
+        }
+        if (patch && patch.status !== "resolved" && patch.status !== "open") {
+          next.status = ticket.status === "resolved" ? "resolved" : "open";
+        }
+        return next;
+      });
+      writeJsonStorage(ticketsKey, list);
+      return list;
+    }
+
+    function appendTicketMessage(ticketId, message) {
+      var ticket = findCreatedTicket(ticketId);
+      if (!ticket) return loadCreatedTickets();
+      var nextMessage = {
+        id: message.id || message.role + "-" + Date.now(),
+        role: message.role,
+        text: message.text,
+        at: message.at || new Date().toISOString(),
+      };
+      return updateCreatedTicket(ticketId, {
+        messages: (ticket.messages || []).concat([nextMessage]),
+      });
+    }
+
+    function buildTicketThanksText(params) {
+      var name = String((params && params.name) || "").trim() || "there";
+      var email = String((params && params.email) || "").trim();
+      var number = String((params && params.ticketNumber) || "").trim();
+      var numberLabel = number
+        ? number.charAt(0) === "#"
+          ? number
+          : "#" + number
+        : "";
+      var ticketPart = numberLabel
+        ? "I've raised ticket " + numberLabel + " for you"
+        : "I've raised your request";
+      var emailPart = email
+        ? " I've also emailed a copy to " + email + " with a link you can open from any device."
+        : "";
+      return "Thanks " + name + " — " + ticketPart + "." + emailPart + " Our team will reply here and by email.";
+    }
+
+    function hasKnownIdentity() {
+      return !validateName(nameInput.value) && !validateEmail(emailInput.value);
+    }
+
+    function syncIdentityFieldsVisibility() {
+      if (nameField) nameField.style.display = skipIdentityFields ? "none" : "block";
+      if (emailField) emailField.style.display = skipIdentityFields ? "none" : "block";
     }
 
     function formatTicketWhen(iso) {
@@ -670,6 +864,36 @@
         return date.toLocaleString();
       } catch (e) {
         return "";
+      }
+    }
+
+    function formatMessageTime(iso) {
+      if (!iso) return "";
+      try {
+        var date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function formatDayLabel(iso) {
+      if (!iso) return "TODAY";
+      try {
+        var date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return "TODAY";
+        var today = new Date();
+        if (date.toDateString() === today.toDateString()) return "TODAY";
+        return date.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        });
+      } catch (e) {
+        return "TODAY";
       }
     }
 
@@ -691,37 +915,42 @@
 
     function renderTicketsList() {
       if (!ticketsItemsEl) return;
-      if (ticketsHeadingEl) ticketsHeadingEl.textContent = "Your tickets";
+      if (ticketsHeadingEl) ticketsHeadingEl.textContent = "My requests";
       if (ticketsNewBtn) ticketsNewBtn.style.display = "inline-flex";
       var list = loadCreatedTickets();
       if (!list.length) {
         ticketsItemsEl.innerHTML =
-          '<p id="desk-cw-tickets-empty">No tickets yet. Send a message, then raise a request to create one.</p>';
+          '<p id="desk-cw-tickets-empty">No requests yet. Send a message to start one.</p>';
         return;
       }
       ticketsItemsEl.innerHTML = list
         .map(function (item) {
-          var subject = item.subject || "Support request";
+          var subject = String(item.subject || "").trim() || "Support request";
+          var description =
+            String(item.description || "").trim() || subject;
           var when = formatTicketWhen(item.createdAt);
           var numberLabel = formatTicketNumber(item.ticketNumber);
+          var statusSuffix = item.status === "resolved" ? " · Resolved" : "";
           return (
             '<button type="button" class="desk-cw-ticket-card" data-ticket-id="' +
             escapeHtmlLive(String(item.ticketId || "")) +
             '">' +
-            (numberLabel
-              ? '<p class="desk-cw-ticket-card-number">' +
-                escapeHtmlLive(numberLabel) +
-                "</p>"
-              : "") +
-            '<p class="desk-cw-ticket-card-title">' +
+            '<p class="desk-cw-ticket-card-subject">' +
             escapeHtmlLive(subject) +
             "</p>" +
+            '<p class="desk-cw-ticket-card-desc">' +
+            escapeHtmlLive(description) +
+            "</p>" +
+            '<div class="desk-cw-ticket-card-footer">' +
+            '<p class="desk-cw-ticket-card-number">' +
+            escapeHtmlLive((numberLabel || "—") + statusSuffix) +
+            "</p>" +
             (when
-              ? '<p class="desk-cw-ticket-card-meta">' +
+              ? '<p class="desk-cw-ticket-card-time">' +
                 escapeHtmlLive(when) +
                 "</p>"
               : "") +
-            "</button>"
+            "</div></button>"
           );
         })
         .join("");
@@ -730,55 +959,156 @@
         cards[c].addEventListener("click", function (event) {
           var id = String(event.currentTarget.getAttribute("data-ticket-id") || "").trim();
           if (!id) return;
-          selectedTicketId = id;
-          setView("ticket-detail");
+          openTicketChat(id);
         });
       }
     }
 
-    function renderTicketDetail(ticketId) {
-      if (!ticketsItemsEl) return;
+    function renderTicketThread(ticketId) {
+      if (!threadEl) return;
       var ticket = findCreatedTicket(ticketId);
-      if (ticketsHeadingEl) {
-        ticketsHeadingEl.textContent =
-          (ticket && ticket.subject) || "Ticket details";
-      }
-      if (ticketsNewBtn) ticketsNewBtn.style.display = "inline-flex";
       if (!ticket) {
-        ticketsItemsEl.innerHTML =
+        threadEl.innerHTML =
           '<p id="desk-cw-tickets-empty">Ticket details are not available.</p>';
         return;
       }
-      var details = Array.isArray(ticket.details) ? ticket.details : [];
-      var numberLabel = formatTicketNumber(ticket.ticketNumber);
-      var html = "";
-      if (numberLabel) {
-        html +=
-          '<div class="desk-cw-ticket-detail">' +
-          '<p class="desk-cw-ticket-detail-label">Ticket number</p>' +
-          '<p class="desk-cw-ticket-detail-value">' +
-          escapeHtmlLive(numberLabel) +
-          "</p></div>";
-      }
-      if (!details.length && !numberLabel) {
-        ticketsItemsEl.innerHTML =
-          '<p id="desk-cw-tickets-empty">No details saved for this ticket.</p>';
+      var messages = Array.isArray(ticket.messages) ? ticket.messages : [];
+      if (!messages.length) {
+        threadEl.innerHTML = '<p id="desk-cw-tickets-empty">No messages yet.</p>';
         return;
       }
-      html += details
-        .map(function (detail) {
-          return (
-            '<div class="desk-cw-ticket-detail">' +
-            '<p class="desk-cw-ticket-detail-label">' +
-            escapeHtmlLive(String(detail.label || "")) +
-            "</p>" +
-            '<p class="desk-cw-ticket-detail-value">' +
-            escapeHtmlLive(String(detail.value || "")) +
-            "</p></div>"
-          );
-        })
-        .join("");
-      ticketsItemsEl.innerHTML = html;
+      var html =
+        '<div class="desk-cw-thread-day"><span>' +
+        escapeHtmlLive(formatDayLabel(messages[0] && messages[0].at)) +
+        "</span></div>";
+      for (var i = 0; i < messages.length; i++) {
+        var msg = messages[i];
+        var role = msg.role === "user" ? "user" : "bot";
+        html +=
+          '<div class="desk-cw-thread-msg ' +
+          role +
+          '">' +
+          '<div class="desk-cw-thread-body">' +
+          '<div class="desk-cw-thread-bubble">' +
+          '<p class="desk-cw-thread-bubble-text">' +
+          escapeHtmlLive(String(msg.text || "")) +
+          '</p><p class="desk-cw-thread-time">' +
+          escapeHtmlLive(formatMessageTime(msg.at)) +
+          "</p></div></div></div>";
+      }
+      threadEl.innerHTML = html;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          threadEl.scrollTop = threadEl.scrollHeight;
+        });
+      });
+    }
+
+    function updateLatestBanner() {
+      if (!latestBanner) return;
+      var list = loadCreatedTickets();
+      var latest = list.length ? list[0] : null;
+      if (!latest || view !== "chat") {
+        latestBanner.classList.remove("open");
+        return;
+      }
+      var numberLabel = formatTicketNumber(latest.ticketNumber);
+      var subject = latest.subject || "Support request";
+      if (latestText) {
+        latestText.textContent =
+          (numberLabel ? numberLabel + " · " : "") + subject;
+      }
+      latestBanner.classList.add("open");
+    }
+
+    function resetMainChat() {
+      chatEl.innerHTML = "";
+      pendingSubject = "";
+      skipIdentityFields = false;
+      if (descriptionInput) descriptionInput.value = "";
+      saveChatHistory([]);
+      addBubble("bot", config.welcome);
+    }
+
+    function startNewRequest() {
+      selectedTicketId = null;
+      closingConfirm = false;
+      resetMainChat();
+      setView("chat");
+    }
+
+    function openTicketChat(ticketId) {
+      selectedTicketId = String(ticketId || "").trim();
+      closingConfirm = false;
+      setView("ticket-detail");
+    }
+
+    function buildClosedMessage(ticket) {
+      var numberLabel = formatTicketNumber(ticket && ticket.ticketNumber);
+      if (numberLabel) {
+        return (
+          "Ticket " +
+          numberLabel.replace(/^#/, "") +
+          " has been closed at your request. Thanks for reaching out — start a new request whenever you need us."
+        );
+      }
+      return "Your request has been closed at your request. Thanks for reaching out — start a new request whenever you need us.";
+    }
+
+    function closeTicket() {
+      var ticket = findCreatedTicket(selectedTicketId);
+      if (!ticket || ticket.status === "resolved") return;
+      closingConfirm = false;
+      var closedMessage = {
+        id: "bot-closed-" + Date.now(),
+        role: "bot",
+        text: buildClosedMessage(ticket),
+        at: new Date().toISOString(),
+      };
+      updateCreatedTicket(selectedTicketId, {
+        status: "resolved",
+        messages: (ticket.messages || []).concat([closedMessage]),
+      });
+      setView("ticket-detail");
+    }
+
+    function reopenTicket() {
+      var ticket = findCreatedTicket(selectedTicketId);
+      if (!ticket || ticket.status !== "resolved") return;
+      // Reopen API not ready — restore locally for now.
+      updateCreatedTicket(selectedTicketId, { status: "open" });
+      setView("ticket-detail");
+    }
+
+    function syncResolveHeaderActions(ticket) {
+      var isTicketDetail = view === "ticket-detail";
+      var isResolved = Boolean(ticket && ticket.status === "resolved");
+      if (!isTicketDetail || isResolved) {
+        closingConfirm = false;
+      }
+      if (resolveActions) {
+        resolveActions.style.display =
+          isTicketDetail && !isResolved ? "inline-flex" : "none";
+      }
+      if (resolveBtn) {
+        resolveBtn.style.display = closingConfirm ? "none" : "inline-flex";
+      }
+      if (resolveCancelBtn) {
+        resolveCancelBtn.style.display = closingConfirm ? "inline-flex" : "none";
+      }
+      if (resolveCloseBtn) {
+        resolveCloseBtn.style.display = closingConfirm ? "inline-flex" : "none";
+      }
+    }
+
+    function openTicketForm(subjectText) {
+      pendingSubject = String(subjectText || "").trim();
+      loadVisitorIdentity();
+      skipIdentityFields = hasKnownIdentity();
+      syncIdentityFieldsVisibility();
+      if (descriptionInput) descriptionInput.value = pendingSubject;
+      setFieldError("description", "");
+      setView("ticket");
     }
 
     function scrollChatToBottom() {
@@ -799,27 +1129,34 @@
       bubble.textContent = text;
       row.appendChild(bubble);
       chatEl.appendChild(row);
-      // Keep Raise CTA after the latest message.
-      if (raiseBtn && raiseBtn.parentNode) chatEl.appendChild(raiseBtn);
       scrollChatToBottom();
       if (!skipPersist) appendChatHistory(role, text);
     }
 
-    function ensureRaiseButton() {
-      if (!raiseBtn || !raiseBtn.parentNode) {
-        raiseBtn = document.createElement("button");
-        raiseBtn.type = "button";
-        raiseBtn.id = "desk-cw-raise";
-        raiseBtn.textContent = "Raise a request";
-        raiseBtn.addEventListener("click", function () { setView("ticket"); });
+    function syncComposerForView() {
+      if (!input || !sendBtn) return;
+      var ticket =
+        composerMode === "ticket-reply"
+          ? findCreatedTicket(selectedTicketId)
+          : null;
+      var resolved = Boolean(ticket && ticket.status === "resolved");
+      if (closedActions) {
+        closedActions.classList.toggle(
+          "open",
+          composerMode === "ticket-reply" && resolved,
+        );
       }
-      chatEl.appendChild(raiseBtn);
-      scrollChatToBottom();
-    }
-
-    function removeRaiseButton() {
-      if (raiseBtn && raiseBtn.parentNode) raiseBtn.parentNode.removeChild(raiseBtn);
-      raiseBtn = null;
+      if (composerMode === "ticket-reply") {
+        input.placeholder = resolved
+          ? "This request is resolved"
+          : "Reply to the team...";
+        input.disabled = resolved;
+        sendBtn.disabled = resolved;
+      } else {
+        input.placeholder = "Type a message...";
+        input.disabled = false;
+        sendBtn.disabled = false;
+      }
     }
 
     function setView(next) {
@@ -827,29 +1164,78 @@
       var isTicket = view === "ticket";
       var isTicketsList = view === "tickets";
       var isTicketDetail = view === "ticket-detail";
+      var isChat = view === "chat";
+      if (!isTicketDetail) {
+        closingConfirm = false;
+      }
       ticketEl.classList.toggle("open", isTicket);
-      if (ticketsListEl) ticketsListEl.classList.toggle("open", isTicketsList || isTicketDetail);
-      chatEl.classList.toggle("hidden", isTicket || isTicketsList || isTicketDetail);
-      formWrap.classList.toggle("hidden", isTicket || isTicketsList || isTicketDetail);
-      backBtn.style.display = isTicket || isTicketsList || isTicketDetail ? "inline-flex" : "none";
-      avatar.style.display = isTicket || isTicketsList || isTicketDetail ? "none" : "inline-flex";
+      if (ticketsListEl) ticketsListEl.classList.toggle("open", isTicketsList);
+      if (threadEl) threadEl.classList.toggle("open", isTicketDetail);
+      chatEl.classList.toggle("hidden", !isChat);
+      composerMode = isTicketDetail ? "ticket-reply" : "chat";
+      var detailTicket = isTicketDetail
+        ? findCreatedTicket(selectedTicketId)
+        : null;
+      var isResolved = Boolean(
+        detailTicket && detailTicket.status === "resolved",
+      );
+      formWrap.classList.toggle(
+        "hidden",
+        isTicket || isTicketsList || (isTicketDetail && isResolved),
+      );
+      if (closedActions) {
+        closedActions.classList.toggle("open", isTicketDetail && isResolved);
+      }
+      if (poweredEl) poweredEl.classList.toggle("open", isTicketDetail);
+      backBtn.style.display =
+        isTicket || isTicketsList || isTicketDetail ? "inline-flex" : "none";
+      avatar.style.display = "inline-flex";
       if (ticketsBtn) {
-        ticketsBtn.style.display = isTicket || isTicketsList || isTicketDetail ? "none" : "inline-flex";
-      }
-      if (isTicket) {
-        loadVisitorIdentity();
-        refreshTicketFormFromConfig();
-      }
-      if (isTicketsList) {
-        selectedTicketId = null;
-        renderTicketsList();
+        ticketsBtn.style.display = isChat ? "inline-flex" : "none";
       }
       if (isTicketDetail) {
-        renderTicketDetail(selectedTicketId);
+        if (titleEl)
+          titleEl.textContent = (detailTicket && detailTicket.subject) || "Ticket";
+        if (taglineEl) {
+          var numberLabel = formatTicketNumber(
+            detailTicket && detailTicket.ticketNumber,
+          );
+          var statusLabel = isResolved ? "Resolved" : "With our team";
+          taglineEl.textContent = [numberLabel, statusLabel]
+            .filter(Boolean)
+            .join(" · ");
+        }
+        syncResolveHeaderActions(detailTicket);
+        renderTicketThread(selectedTicketId);
+      } else {
+        syncResolveHeaderActions(null);
+        if (isTicket) {
+          if (titleEl) titleEl.textContent = pendingSubject || "Raise a request";
+          if (taglineEl) taglineEl.textContent = "New request";
+          loadVisitorIdentity();
+          syncIdentityFieldsVisibility();
+          if (
+            descriptionInput &&
+            !String(descriptionInput.value || "").trim() &&
+            pendingSubject
+          ) {
+            descriptionInput.value = pendingSubject;
+          }
+          refreshTicketFormFromConfig();
+        } else if (isTicketsList) {
+          selectedTicketId = null;
+          if (titleEl) titleEl.textContent = widgetTitle;
+          if (taglineEl) taglineEl.textContent = widgetTagline;
+          renderTicketsList();
+        } else {
+          selectedTicketId = null;
+          if (titleEl) titleEl.textContent = widgetTitle;
+          if (taglineEl) taglineEl.textContent = widgetTagline;
+          scrollChatToBottom();
+        }
       }
-      if (!isTicket && !isTicketsList && !isTicketDetail) {
-        scrollChatToBottom();
-      }
+      syncComposerForView();
+      updateLatestBanner();
     }
 
     function escapeHtmlLive(value) {
@@ -925,12 +1311,19 @@
         if (!live) return;
         configLoaded = true;
         if (live.title) {
+          widgetTitle = live.title;
           document.getElementById("desk-cw-title").textContent = live.title;
-          avatar.textContent = (live.title.slice(0, 1) || "S").toUpperCase();
+          avatar.textContent =
+            (live.title.slice(0, 1) || "S").toUpperCase() +
+            (live.title.slice(1, 2) || "").toLowerCase();
+        }
+        if (live.tagline) {
+          widgetTagline = live.tagline;
+          if (view === "chat" && taglineEl) taglineEl.textContent = live.tagline;
         }
         if (live.welcome) config.welcome = live.welcome;
         var details = live.ticketDetails || [];
-        askFields = details.filter(function (field) { return field.source === "ask_customer"; });
+        askFields = details.filter(isAskCustomerField);
         presetFields = details.filter(function (field) { return field.source === "preset" && field.fieldRef; });
         embedFields = details.filter(function (field) {
           return (field.source === "embedded_in_ui" || field.source === "embed") && field.fieldRef;
@@ -954,17 +1347,9 @@
     }
 
     function restoreChatFromStorage() {
-      var history = loadChatHistory();
-      if (history.length) {
-        for (var i = 0; i < history.length; i++) {
-          var item = history[i];
-          if (!item || (item.role !== "user" && item.role !== "bot")) continue;
-          addBubble(item.role, String(item.text || ""), { skipPersist: true });
-        }
-      } else {
-        addBubble("bot", config.welcome);
-      }
-      ensureRaiseButton();
+      chatEl.innerHTML = "";
+      addBubble("bot", config.welcome, { skipPersist: true });
+      updateLatestBanner();
     }
 
     restoreChatFromStorage();
@@ -976,16 +1361,69 @@
 
     launcher.addEventListener("click", function () { setOpen(!open); });
     backBtn.addEventListener("click", function () {
-      if (view === "ticket-detail") setView("tickets");
-      else setView("chat");
+      if (view === "ticket-detail") {
+        selectedTicketId = null;
+        closingConfirm = false;
+        resetMainChat();
+        setView("chat");
+        return;
+      }
+      if (view === "ticket") {
+        pendingSubject = "";
+        skipIdentityFields = false;
+        if (descriptionInput) descriptionInput.value = "";
+        setView("chat");
+        return;
+      }
+      setView("chat");
     });
     if (ticketsBtn) {
       ticketsBtn.addEventListener("click", function () { setView("tickets"); });
     }
     if (ticketsNewBtn) {
       ticketsNewBtn.addEventListener("click", function () {
-        selectedTicketId = null;
-        setView("ticket");
+        startNewRequest();
+      });
+    }
+    if (latestNewBtn) {
+      latestNewBtn.addEventListener("click", function () {
+        startNewRequest();
+      });
+    }
+    if (latestLink) {
+      latestLink.addEventListener("click", function () {
+        var list = loadCreatedTickets();
+        if (!list.length) return;
+        openTicketChat(list[0].ticketId);
+      });
+    }
+    if (resolveBtn) {
+      resolveBtn.addEventListener("click", function () {
+        var ticket = findCreatedTicket(selectedTicketId);
+        if (!ticket || ticket.status === "resolved") return;
+        closingConfirm = true;
+        syncResolveHeaderActions(ticket);
+      });
+    }
+    if (resolveCancelBtn) {
+      resolveCancelBtn.addEventListener("click", function () {
+        closingConfirm = false;
+        syncResolveHeaderActions(findCreatedTicket(selectedTicketId));
+      });
+    }
+    if (resolveCloseBtn) {
+      resolveCloseBtn.addEventListener("click", function () {
+        closeTicket();
+      });
+    }
+    if (reopenBtn) {
+      reopenBtn.addEventListener("click", function () {
+        reopenTicket();
+      });
+    }
+    if (newChatBtn) {
+      newChatBtn.addEventListener("click", function () {
+        startNewRequest();
       });
     }
 
@@ -996,9 +1434,20 @@
       event.preventDefault();
       var text = (input.value || "").trim();
       if (!text) return;
-      addBubble("user", text);
+      if (composerMode === "ticket-reply") {
+        var ticket = findCreatedTicket(selectedTicketId);
+        if (!ticket || ticket.status === "resolved") return;
+        appendTicketMessage(selectedTicketId, {
+          role: "user",
+          text: text,
+          at: new Date().toISOString(),
+        });
+        input.value = "";
+        renderTicketThread(selectedTicketId);
+        return;
+      }
       input.value = "";
-      ensureRaiseButton();
+      openTicketForm(text);
     });
 
     function setFieldError(key, message) {
@@ -1015,6 +1464,7 @@
     function clearAllErrors() {
       setFieldError("name", "");
       setFieldError("email", "");
+      setFieldError("description", "");
       for (var i = 0; i < askFields.length; i++) setFieldError(askFields[i].id, "");
     }
 
@@ -1026,6 +1476,7 @@
 
     bindClearError(nameInput, "name");
     bindClearError(emailInput, "email");
+    bindClearError(descriptionInput, "description");
     for (var bi = 0; bi < askFields.length; bi++) {
       var nodes = document.querySelectorAll('[data-ask-id="' + askFields[bi].id + '"]');
       for (var bj = 0; bj < nodes.length; bj++) bindClearError(nodes[bj], askFields[bi].id);
@@ -1578,10 +2029,22 @@
       }
       var hasError = false;
 
-      var nameError = validateName(nameInput.value);
-      if (nameError) { setFieldError("name", nameError); hasError = true; }
-      var emailError = validateEmail(emailInput.value);
-      if (emailError) { setFieldError("email", emailError); hasError = true; }
+      if (!skipIdentityFields) {
+        var nameError = validateName(nameInput.value);
+        if (nameError) { setFieldError("name", nameError); hasError = true; }
+        var emailError = validateEmail(emailInput.value);
+        if (emailError) { setFieldError("email", emailError); hasError = true; }
+      }
+
+      var formDescription = String(
+        descriptionInput && descriptionInput.value != null
+          ? descriptionInput.value
+          : "",
+      ).trim();
+      if (!formDescription) {
+        setFieldError("description", "Description is required");
+        hasError = true;
+      }
 
       var answers = {};
       for (var i = 0; i < askFields.length; i++) {
@@ -1604,8 +2067,8 @@
       var formDetails = [
         { label: "Name", value: submittedName },
         { label: "Email", value: submittedEmail },
+        { label: "Description", value: formDescription },
       ];
-      var formSubject = "";
       for (var di = 0; di < askFields.length; di++) {
         var askField = askFields[di];
         var rawAnswer = answers[askField.id];
@@ -1615,8 +2078,6 @@
         if (!askValue) continue;
         var askLabel = String(askField.label || askField.fieldRef || "Field").trim() || "Field";
         formDetails.push({ label: askLabel, value: askValue });
-        var askKey = fieldKeyFromRef(askField.fieldRef).toLowerCase();
-        if (!formSubject && askKey === "subject") formSubject = askValue;
       }
       for (var edi = 0; edi < embedFields.length; edi++) {
         var embedDetailField = embedFields[edi];
@@ -1627,14 +2088,8 @@
           value: embedValue,
         });
       }
-      if (!formSubject) {
-        for (var si = 0; si < formDetails.length; si++) {
-          if (formDetails[si].label === "Name" || formDetails[si].label === "Email") continue;
-          formSubject = formDetails[si].value;
-          break;
-        }
-      }
-      if (!formSubject) formSubject = "Support request";
+      var formSubject = String(pendingSubject || "").trim() || "Support request";
+      if (!formDescription) formDescription = formSubject;
 
       if (!config.apiBaseUrl || !config.chatWidgetId) {
         if (statusEl) {
@@ -1662,6 +2117,8 @@
           requesterName: submittedName,
           requesterEmail: submittedEmail,
           requesterPhone: null,
+          subject: formSubject,
+          description: formDescription,
           answers: answers,
         }),
       }).then(function (res) {
@@ -1684,38 +2141,57 @@
         for (var k = 0; k < askFields.length; k++) clearAskValue(askFields[k]);
         clearAllErrors();
         var payload = result.body && (result.body.Data != null ? result.body.Data : result.body.data != null ? result.body.data : result.body);
+        var createdId = "local-" + Date.now();
         var createdTicketNumber = "";
+        var createdSubject = formSubject;
+        var createdAt = new Date().toISOString();
         if (payload && typeof payload === "object") {
+          createdId = String(
+            payload.TicketId || payload.ticketId || payload.Id || payload.id || createdId,
+          );
           createdTicketNumber = String(
             payload.TicketNumber || payload.ticketNumber || "",
           ).trim();
-          rememberCreatedTicket({
-            ticketId: payload.TicketId || payload.ticketId || payload.Id || payload.id || ("local-" + Date.now()),
-            ticketNumber: createdTicketNumber,
-            subject: payload.Subject || payload.subject || formSubject,
-            createdAt: payload.CreatedAt || payload.createdAt || new Date().toISOString(),
-            details: formDetails,
-          });
-        } else {
-          rememberCreatedTicket({
-            ticketId: "local-" + Date.now(),
-            subject: formSubject,
-            createdAt: new Date().toISOString(),
-            details: formDetails,
-          });
+          createdSubject = String(
+            payload.Subject || payload.subject || formSubject,
+          ).trim() || formSubject;
+          createdAt = payload.CreatedAt || payload.createdAt || createdAt;
         }
-        setView("chat");
-        removeRaiseButton();
-        var thanksText = "Thanks — your request was submitted.";
-        if (createdTicketNumber) {
-          thanksText +=
-            " Ticket " +
-            (createdTicketNumber.charAt(0) === "#"
-              ? createdTicketNumber
-              : "#" + createdTicketNumber) +
-            ".";
-        }
-        addBubble("bot", thanksText);
+        var thanksText = buildTicketThanksText({
+          name: submittedName,
+          email: submittedEmail,
+          ticketNumber: createdTicketNumber,
+        });
+        var threadNow = new Date().toISOString();
+        rememberCreatedTicket({
+          ticketId: createdId,
+          ticketNumber: createdTicketNumber,
+          subject: createdSubject,
+          description: formDescription,
+          createdAt: createdAt,
+          status: "open",
+          details: formDetails,
+          messages: [
+            {
+              id: "user-" + Date.now(),
+              role: "user",
+              text: formSubject,
+              at: threadNow,
+            },
+            {
+              id: "bot-thanks-" + Date.now(),
+              role: "bot",
+              text: thanksText,
+              at: threadNow,
+            },
+          ],
+        });
+        pendingSubject = "";
+        skipIdentityFields = false;
+        if (descriptionInput) descriptionInput.value = "";
+        resetMainChat();
+        selectedTicketId = createdId;
+        setView("ticket-detail");
       }).catch(function () {
         if (statusEl) {
           statusEl.style.display = "block";
@@ -1753,9 +2229,7 @@
             cfg.position = live.position;
           }
           cfg.captureFields = live.ticketDetails || [];
-          cfg.askFields = (live.ticketDetails || []).filter(function (field) {
-            return field && field.source === "ask_customer" && field.fieldRef;
-          });
+          cfg.askFields = (live.ticketDetails || []).filter(isAskCustomerField);
         }
         start(cfg);
       });
