@@ -226,8 +226,20 @@
       text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     }
     var id = String(item.messageId || item.MessageId || "").trim();
-    if (!id && !text) return null;
-    var attachments = item.attachments || item.Attachments || [];
+    var attachments = item.attachments || item.Attachments || item.files || item.Files || [];
+    if (!Array.isArray(attachments)) attachments = [];
+    attachments = attachments.map(function (file) {
+      if (!file || typeof file !== "object") return { fileName: "Attachment", url: "" };
+      return {
+        fileName: String(
+          file.fileName || file.FileName || file.name || file.Name || file.filename || file.originalFileName || file.OriginalFileName || "Attachment",
+        ),
+        url: String(
+          file.url || file.Url || file.downloadUrl || file.DownloadUrl || file.contentUrl || file.ContentUrl || file.fileUrl || file.FileUrl || file.publicUrl || file.PublicUrl || file.href || file.Href || "",
+        ),
+      };
+    });
+    if (!id && !text && !attachments.length) return null;
     return {
       id: id || ("msg-" + Date.now()),
       role: role,
@@ -235,8 +247,7 @@
       senderName: String(item.senderName || item.SenderName || "").trim(),
       text: text,
       at: item.createdAt || item.CreatedAt || "",
-      replyToMessageId: item.replyToMessageId || item.ReplyToMessageId || null,
-      attachments: Array.isArray(attachments) ? attachments : [],
+      attachments: attachments,
     };
   }
 
@@ -544,6 +555,8 @@
       ".desk-cw-thread-msg.user .desk-cw-thread-bubble{border-bottom-right-radius:6px;background:" + color + ";color:#fff}",
       ".desk-cw-thread-bubble-text{margin:0}",
       ".desk-cw-thread-time{margin:6px 0 0;font-size:10px;line-height:1;text-align:right}",
+      ".desk-cw-thread-files{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}",
+      ".desk-cw-attach-chip{display:inline-flex;align-items:center;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #e2e8f0;background:#f8fafc;color:#334155;border-radius:999px;padding:3px 8px;font-size:11px;line-height:1.3;cursor:pointer}",
       ".desk-cw-thread-msg.bot .desk-cw-thread-time{color:#94a3b8}",
       ".desk-cw-thread-msg.user .desk-cw-thread-time{color:rgb(255 255 255 / .7)}",
       "#desk-cw-tickets-heading{margin:0;font-size:13px;font-weight:600;color:" + color + "}",
@@ -604,12 +617,13 @@
     style.id = "desk-cw-style";
     style.textContent = css(config.color, config.position === "bottom-left") +
       "#desk-cw-avatar img{width:28px;height:28px;border-radius:999px;object-fit:cover;display:block}" +
-      "#desk-cw-attach{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
-      "#desk-cw-files{display:none;gap:6px;flex-wrap:wrap;padding:0 12px 8px}" +
+      "#desk-cw-attach{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
+      "#desk-cw-file{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0}" +
+      "#desk-cw-attach.is-disabled{opacity:.4;pointer-events:none}" +
+      "#desk-cw-files{display:none;gap:6px;flex-wrap:wrap;padding:8px 12px 0}" +
       "#desk-cw-files.open{display:flex}" +
       "#desk-cw-file-chip{font-size:11px;background:#f1f5f9;color:#334155;border-radius:999px;padding:2px 8px}" +
       "#desk-cw-confirm{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.4}" +
-      "#desk-cw-quote{margin:0 0 4px;padding:4px 6px;border-left:2px solid rgb(15 23 42 / .25);font-size:11px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
       "#desk-cw-load-earlier{display:block;margin:0 auto 8px;border:0;background:transparent;color:#64748b;font-size:12px;cursor:pointer;text-decoration:underline}";
     document.head.appendChild(style);
 
@@ -682,12 +696,12 @@
       '<button type="button" id="desk-cw-submit">Submit request</button>' +
       "</div>" +
       '<div id="desk-cw-thread"></div>' +
+      '<div id="desk-cw-files"></div>' +
       '<form id="desk-cw-form-wrap">' +
-      '<label id="desk-cw-attach" aria-label="Attach files">' + CLIP_ICON + '<input id="desk-cw-file" type="file" multiple hidden /></label>' +
+      '<label id="desk-cw-attach" aria-label="Attach files">' + CLIP_ICON + '<input id="desk-cw-file" type="file" multiple tabindex="-1" /></label>' +
       '<input id="desk-cw-input" type="text" placeholder="Type a message..." autocomplete="off" />' +
       '<button type="submit" id="desk-cw-send" aria-label="Send">' + SEND_ICON + "</button>" +
       "</form>" +
-      '<div id="desk-cw-files"></div>' +
       '<div id="desk-cw-closed-actions">' +
       '<div id="desk-cw-closed-btns">' +
       '<button type="button" id="desk-cw-reopen">' + ROTATE_ICON + "Reopen request</button>" +
@@ -759,6 +773,7 @@
     var hubInvokeId = 0;
     var hubStopped = false;
     var fileInput = document.getElementById("desk-cw-file");
+    var attachLabel = document.getElementById("desk-cw-attach");
     var filesEl = document.getElementById("desk-cw-files");
     var MAX_CHAT_MESSAGES = 50;
     var MAX_STORED_TICKETS = 20;
@@ -956,8 +971,17 @@
           var data = result.body.data != null ? result.body.data : result.body.Data;
           if (!Array.isArray(data)) return;
           sessionTickets = data.map(mapSessionConversation).filter(Boolean);
+          for (var s = 0; s < sessionTickets.length; s++) {
+            var remoteTicket = sessionTickets[s];
+            updateCreatedTicket(remoteTicket.ticketId, {
+              status: remoteTicket.status,
+              subject: remoteTicket.subject,
+              ticketNumber: remoteTicket.ticketNumber,
+            });
+          }
           if (view === "tickets") renderTicketsList();
           updateLatestBanner();
+          syncOpenTicketChrome();
         })
         .catch(function () {});
     }
@@ -1103,75 +1127,57 @@
 
     function ensureRealtime() {
       if (hubStopped || hubSocket || !config.apiBaseUrl || !config.chatWidgetId) return;
+      if (typeof WebSocket === "undefined") return;
       var sessionId = getOrCreateSessionId();
       if (!sessionId) return;
       var origin = deskOriginFromApiBase(config.apiBaseUrl);
       var hubPath = origin + "/realtime/chat-widget";
       var query = "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) + "&sessionId=" + encodeURIComponent(sessionId);
-      var negotiateUrl = hubPath + "/negotiate?" + query + "&negotiateVersion=1";
-      publicFetch(negotiateUrl, { method: "POST" })
-        .then(function (res) {
-          return res.json().then(function (body) {
-            return { ok: res.ok, body: body };
-          }).catch(function () {
-            return { ok: false, body: null };
-          });
-        })
-        .then(function (result) {
-          if (!result.ok || !result.body || hubStopped) return;
-          var neg = result.body;
-          var token = neg.connectionToken || neg.connectionId || "";
-          var wsUrl = "";
-          if (neg.url) {
-            wsUrl = String(neg.url);
-            if (neg.accessToken) {
-              wsUrl += (wsUrl.indexOf("?") >= 0 ? "&" : "?") + "access_token=" + encodeURIComponent(neg.accessToken);
-            }
-          } else if (token) {
-            wsUrl = hubPath.replace(/^http/i, "ws") + "?id=" + encodeURIComponent(token) + "&" + query;
+      var wsUrl = hubPath.replace(/^http/i, "ws") + "?" + query;
+      var socket;
+      try {
+        socket = new WebSocket(wsUrl);
+      } catch (e) {
+        return;
+      }
+      hubSocket = socket;
+      var buffer = "";
+      socket.onopen = function () {
+        try {
+          socket.send('{"protocol":"json","version":1}\u001e');
+        } catch (e2) {}
+        invokeRefreshTickets();
+      };
+      socket.onmessage = function (event) {
+        buffer += String(event.data || "");
+        var parts = buffer.split("\u001e");
+        buffer = parts.pop() || "";
+        for (var i = 0; i < parts.length; i++) {
+          var raw = parts[i];
+          if (!raw) continue;
+          var msg = null;
+          try { msg = JSON.parse(raw); } catch (e3) { continue; }
+          if (!msg) continue;
+          if (msg.type === 6) {
+            try { socket.send('{"type":6}\u001e'); } catch (e4) {}
+            continue;
           }
-          if (!wsUrl || typeof WebSocket === "undefined") return;
-          var socket = new WebSocket(wsUrl);
-          hubSocket = socket;
-          var buffer = "";
-          socket.onopen = function () {
-            try {
-              socket.send('{"protocol":"json","version":1}\u001e');
-            } catch (e) {}
-            invokeRefreshTickets();
-          };
-          socket.onmessage = function (event) {
-            buffer += String(event.data || "");
-            var parts = buffer.split("\u001e");
-            buffer = parts.pop() || "";
-            for (var i = 0; i < parts.length; i++) {
-              var raw = parts[i];
-              if (!raw) continue;
-              var msg = null;
-              try { msg = JSON.parse(raw); } catch (e2) { continue; }
-              if (!msg) continue;
-              if (msg.type === 6) {
-                try { socket.send('{"type":6}\u001e'); } catch (e3) {}
-                continue;
-              }
-              if (msg.type === 1 && msg.target) {
-                var target = String(msg.target);
-                var arg = msg.arguments && msg.arguments[0];
-                if (target === "chatWidget.event") applyHubEvent(arg);
-                else if (target === "session.tickets.updated" || target === "connected") {
-                  refreshSessionConversations();
-                }
-              }
+          if (msg.type === 1 && msg.target) {
+            var target = String(msg.target);
+            var arg = msg.arguments && msg.arguments[0];
+            if (target === "chatWidget.event") applyHubEvent(arg);
+            else if (target === "session.tickets.updated" || target === "connected") {
+              refreshSessionConversations();
             }
-          };
-          socket.onclose = function () {
-            if (hubSocket === socket) hubSocket = null;
-            if (!hubStopped) {
-              window.setTimeout(function () { ensureRealtime(); }, 2000);
-            }
-          };
-        })
-        .catch(function () {});
+          }
+        }
+      };
+      socket.onclose = function () {
+        if (hubSocket === socket) hubSocket = null;
+        if (!hubStopped) {
+          window.setTimeout(function () { ensureRealtime(); }, 2000);
+        }
+      };
     }
 
     function renderPendingFiles() {
@@ -1215,7 +1221,11 @@
           return { ok: res.ok, body: null };
         });
       }).then(function (result) {
-        if (!result.ok) return result;
+        if (!result.ok) {
+          pendingFiles = files;
+          renderPendingFiles();
+          return result;
+        }
         var created = mapPublicMessage(envelopeData(result.body) || {});
         if (created && created.text) upsertThreadMessage(id, created);
         return loadMessages(id).then(function () { return result; });
@@ -1384,19 +1394,26 @@
     function findCreatedTicket(ticketId) {
       var id = String(ticketId || "").trim();
       if (!id) return null;
+      var local = null;
       var list = loadCreatedTickets();
       for (var i = 0; i < list.length; i++) {
-        if (list[i] && String(list[i].ticketId) === id) return list[i];
+        if (list[i] && String(list[i].ticketId) === id) local = list[i];
       }
-      var remote = visibleTickets();
+      var remoteHit = null;
+      var remote = sessionTickets || [];
       for (var j = 0; j < remote.length; j++) {
-        if (remote[j] && String(remote[j].ticketId) === id) {
-          var apiMessages = threadMessages(id);
-          return Object.assign({}, remote[j], {
-            messages: apiMessages,
-          });
-        }
+        if (remote[j] && String(remote[j].ticketId) === id) remoteHit = remote[j];
       }
+      if (remoteHit) {
+        return Object.assign({}, local || {}, remoteHit, {
+          status: remoteHit.status,
+          statusLabel: remoteHit.statusLabel,
+          messages: threadMessages(id).length
+            ? threadMessages(id)
+            : (local && local.messages) || [],
+        });
+      }
+      if (local) return local;
       if (threadMessages(id).length || confirmationByTicket[id]) {
         return {
           ticketId: id,
@@ -1422,12 +1439,11 @@
       ticketsItemsEl.innerHTML = list
         .map(function (item) {
           var subject = String(item.subject || "").trim() || "Support request";
-          var description =
-            String(item.statusLabel || "").trim() ||
-            (item.status === "resolved" ? "Resolved" : "Open");
           var when = formatTicketWhen(item.createdAt);
           var numberLabel = formatTicketNumber(item.ticketNumber);
-          var statusSuffix = item.status === "resolved" ? " · Resolved" : "";
+          var statusText =
+            String(item.statusLabel || "").trim() ||
+            (item.status === "resolved" ? "Resolved" : "Open");
           return (
             '<button type="button" class="desk-cw-ticket-card" data-ticket-id="' +
             escapeHtmlLive(String(item.ticketId || "")) +
@@ -1435,12 +1451,9 @@
             '<p class="desk-cw-ticket-card-subject">' +
             escapeHtmlLive(subject) +
             "</p>" +
-            '<p class="desk-cw-ticket-card-desc">' +
-            escapeHtmlLive(description) +
-            "</p>" +
             '<div class="desk-cw-ticket-card-footer">' +
             '<p class="desk-cw-ticket-card-number">' +
-            escapeHtmlLive((numberLabel || "—") + statusSuffix) +
+            escapeHtmlLive((numberLabel || "—") + " · " + statusText) +
             "</p>" +
             (when
               ? '<p class="desk-cw-ticket-card-time">' +
@@ -1459,6 +1472,38 @@
           openTicketChat(id);
         });
       }
+    }
+
+    function resolveAttachmentUrl(url) {
+      var value = String(url || "").trim();
+      if (!value) return "";
+      if (/^https?:\/\//i.test(value)) return value;
+      var base = String(config.apiBaseUrl || "").replace(/\/$/, "");
+      if (!base) return value;
+      return value.charAt(0) === "/" ? base + value : base + "/" + value;
+    }
+
+    function downloadAttachment(url, fileName) {
+      var href = resolveAttachmentUrl(url);
+      var name = String(fileName || "attachment").trim() || "attachment";
+      if (!href) return;
+      publicFetch(href, { method: "GET", headers: { Accept: "*/*" } })
+        .then(function (res) {
+          if (!res.ok) return null;
+          return res.blob();
+        })
+        .then(function (blob) {
+          if (!blob) return;
+          var objectUrl = URL.createObjectURL(blob);
+          var link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = name;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+        })
+        .catch(function () {});
     }
 
     function renderTicketThread(ticketId) {
@@ -1484,10 +1529,6 @@
         threadEl.innerHTML = '<p id="desk-cw-tickets-empty">No messages yet.</p>';
         return;
       }
-      var byId = {};
-      for (var b = 0; b < messages.length; b++) {
-        if (messages[b] && messages[b].id) byId[messages[b].id] = messages[b];
-      }
       var html = "";
       if (threadPaging[ticketId]) {
         html += '<button type="button" id="desk-cw-load-earlier">Load earlier</button>';
@@ -1504,19 +1545,24 @@
       for (var i = 0; i < messages.length; i++) {
         var msg = messages[i];
         var role = msg.role === "user" ? "user" : "bot";
-        var quote = "";
-        if (msg.replyToMessageId && byId[msg.replyToMessageId]) {
-          quote =
-            '<p id="desk-cw-quote">' +
-            escapeHtmlLive(String(byId[msg.replyToMessageId].text || "Reply")) +
-            "</p>";
-        }
         var attachmentHtml = "";
         var attachments = msg.attachments || [];
-        for (var a = 0; a < attachments.length; a++) {
-          var file = attachments[a] || {};
-          var fileName = String(file.fileName || file.name || file.FileName || "Attachment");
-          attachmentHtml += '<p class="desk-cw-thread-time">' + escapeHtmlLive(fileName) + "</p>";
+        if (attachments.length) {
+          attachmentHtml = '<div class="desk-cw-thread-files">';
+          for (var a = 0; a < attachments.length; a++) {
+            var file = attachments[a] || {};
+            var fileName = String(file.fileName || file.name || file.FileName || "Attachment");
+            var fileUrl = resolveAttachmentUrl(file.url || "");
+            attachmentHtml +=
+              '<button type="button" class="desk-cw-attach-chip" data-file-url="' +
+              escapeHtmlLive(fileUrl) +
+              '" data-file-name="' +
+              escapeHtmlLive(fileName) +
+              '">' +
+              escapeHtmlLive(fileName) +
+              "</button>";
+          }
+          attachmentHtml += "</div>";
         }
         html +=
           '<div class="desk-cw-thread-msg ' +
@@ -1524,16 +1570,23 @@
           '">' +
           '<div class="desk-cw-thread-body">' +
           '<div class="desk-cw-thread-bubble">' +
-          quote +
-          '<p class="desk-cw-thread-bubble-text">' +
-          escapeHtmlLive(String(msg.text || "")) +
-          "</p>" +
-          attachmentHtml +
+          (msg.text
+            ? '<p class="desk-cw-thread-bubble-text">' + escapeHtmlLive(String(msg.text || "")) + "</p>"
+            : "") +
           '<p class="desk-cw-thread-time">' +
           escapeHtmlLive(formatMessageTime(msg.at)) +
-          "</p></div></div></div>";
+          "</p></div>" +
+          attachmentHtml +
+          "</div></div>";
       }
       threadEl.innerHTML = html;
+      var chips = threadEl.querySelectorAll(".desk-cw-attach-chip");
+      for (var c = 0; c < chips.length; c++) {
+        chips[c].addEventListener("click", function (event) {
+          var chip = event.currentTarget;
+          downloadAttachment(chip.getAttribute("data-file-url") || "", chip.getAttribute("data-file-name") || "attachment");
+        });
+      }
       var earlier = document.getElementById("desk-cw-load-earlier");
       if (earlier) {
         earlier.addEventListener("click", function () {
@@ -1578,6 +1631,12 @@
       closingConfirm = false;
       resetMainChat();
       setView("chat");
+    }
+
+    function openNewRequestForm() {
+      selectedTicketId = null;
+      closingConfirm = false;
+      openTicketForm("");
     }
 
     function openTicketChat(ticketId) {
@@ -1639,8 +1698,13 @@
     function reopenTicket() {
       var ticket = findCreatedTicket(selectedTicketId);
       if (!ticket || ticket.status !== "resolved") return;
-      // Reopen API not ready — restore locally for now.
       updateCreatedTicket(selectedTicketId, { status: "open" });
+      if (sessionTickets) {
+        sessionTickets = sessionTickets.map(function (item) {
+          if (!item || item.ticketId !== selectedTicketId) return item;
+          return Object.assign({}, item, { status: "open", statusLabel: "Open" });
+        });
+      }
       setView("ticket-detail");
     }
 
@@ -1668,7 +1732,7 @@
     function openTicketForm(subjectText) {
       pendingSubject = String(subjectText || "").trim();
       loadVisitorIdentity();
-      skipIdentityFields = false;
+      skipIdentityFields = hasKnownIdentity();
       syncIdentityFieldsVisibility();
       if (descriptionInput) descriptionInput.value = pendingSubject;
       setFieldError("description", "");
@@ -1716,11 +1780,29 @@
           : "Reply to the team...";
         input.disabled = resolved;
         sendBtn.disabled = resolved;
+        if (attachLabel) attachLabel.classList.toggle("is-disabled", resolved);
       } else {
         input.placeholder = "Type a message...";
         input.disabled = false;
         sendBtn.disabled = false;
+        if (attachLabel) attachLabel.classList.remove("is-disabled");
       }
+    }
+
+    function syncOpenTicketChrome() {
+      if (view !== "ticket-detail" || !selectedTicketId) return;
+      var detailTicket = findCreatedTicket(selectedTicketId);
+      var isResolved = Boolean(detailTicket && detailTicket.status === "resolved");
+      if (formWrap) formWrap.classList.toggle("hidden", isResolved);
+      if (closedActions) closedActions.classList.toggle("open", isResolved);
+      if (titleEl) titleEl.textContent = (detailTicket && detailTicket.subject) || "Ticket";
+      if (taglineEl) {
+        var numberLabel = formatTicketNumber(detailTicket && detailTicket.ticketNumber);
+        var statusLabel = isResolved ? "Resolved" : "With our team";
+        taglineEl.textContent = [numberLabel, statusLabel].filter(Boolean).join(" · ");
+      }
+      syncResolveHeaderActions(detailTicket);
+      syncComposerForView();
     }
 
     function setView(next) {
@@ -1955,12 +2037,12 @@
     }
     if (ticketsNewBtn) {
       ticketsNewBtn.addEventListener("click", function () {
-        startNewRequest();
+        openNewRequestForm();
       });
     }
     if (latestNewBtn) {
       latestNewBtn.addEventListener("click", function () {
-        startNewRequest();
+        openNewRequestForm();
       });
     }
     if (latestLink) {
@@ -2088,6 +2170,14 @@
         renderPendingFiles();
       });
     }
+    if (attachLabel && fileInput) {
+      attachLabel.addEventListener("click", function (event) {
+        if (event.target === fileInput) return;
+        event.preventDefault();
+        if (attachLabel.classList.contains("is-disabled")) return;
+        fileInput.click();
+      });
+    }
     window.addEventListener("focus", function () {
       if (open && view === "ticket-detail" && selectedTicketId) {
         markConversationRead(selectedTicketId);
@@ -2110,11 +2200,12 @@
     formWrap.addEventListener("submit", function (event) {
       event.preventDefault();
       var text = (input.value || "").trim();
-      if (!text) return;
       if (composerMode === "ticket-reply") {
+        if (!text && !pendingFiles.length) return;
         var ticket = findCreatedTicket(selectedTicketId);
         if (!ticket || ticket.status === "resolved") return;
         var replyText = text;
+        var replyFiles = pendingFiles.slice();
         input.value = "";
         upsertThreadMessage(selectedTicketId, {
           id: "pending-" + Date.now(),
@@ -2122,11 +2213,15 @@
           senderType: "customer",
           text: replyText,
           at: new Date().toISOString(),
+          attachments: replyFiles.map(function (file) {
+            return { fileName: file.name || "Attachment" };
+          }),
         });
         renderTicketThread(selectedTicketId);
         postVisitorMessage(selectedTicketId, replyText);
         return;
       }
+      if (!text) return;
       input.value = "";
       openTicketForm(text);
     });
@@ -2710,10 +2805,12 @@
       }
       var hasError = false;
 
-      var nameError = validateName(nameInput.value);
-      if (nameError) { setFieldError("name", nameError); hasError = true; }
-      var emailError = validateEmail(emailInput.value);
-      if (emailError) { setFieldError("email", emailError); hasError = true; }
+      if (!skipIdentityFields) {
+        var nameError = validateName(nameInput.value);
+        if (nameError) { setFieldError("name", nameError); hasError = true; }
+        var emailError = validateEmail(emailInput.value);
+        if (emailError) { setFieldError("email", emailError); hasError = true; }
+      }
 
       var formDescription = String(
         descriptionInput && descriptionInput.value != null
@@ -2861,8 +2958,14 @@
         if (descriptionInput) descriptionInput.value = "";
         resetMainChat();
         selectedTicketId = createdId;
-        setView("ticket-detail");
-        loadMessages(createdId);
+        if (pendingFiles.length) {
+          postVisitorMessage(createdId, "").then(
+            function () { setView("ticket-detail"); },
+            function () { setView("ticket-detail"); },
+          );
+        } else {
+          setView("ticket-detail");
+        }
         refreshSessionConversations();
         ensureRealtime();
         invokeRefreshTickets();
