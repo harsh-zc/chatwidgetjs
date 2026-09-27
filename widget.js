@@ -229,13 +229,20 @@
     var attachments = item.attachments || item.Attachments || item.files || item.Files || [];
     if (!Array.isArray(attachments)) attachments = [];
     attachments = attachments.map(function (file) {
-      if (!file || typeof file !== "object") return { fileName: "Attachment", url: "" };
+      if (!file || typeof file !== "object") return { fileName: "Attachment", url: "", isInline: false, id: "" };
+      var fileName = String(
+        file.fileName || file.FileName || file.name || file.Name || file.filename || file.originalFileName || file.OriginalFileName || "Attachment",
+      );
+      var isInline =
+        file.isInline === true ||
+        file.IsInline === true ||
+        /^inline-[0-9a-f-]{8,}$/i.test(fileName);
       return {
-        fileName: String(
-          file.fileName || file.FileName || file.name || file.Name || file.filename || file.originalFileName || file.OriginalFileName || "Attachment",
-        ),
+        id: String(file.attachmentId || file.AttachmentId || file.id || file.Id || ""),
+        fileName: fileName,
+        isInline: isInline,
         url: String(
-          file.url || file.Url || file.downloadUrl || file.DownloadUrl || file.contentUrl || file.ContentUrl || file.fileUrl || file.FileUrl || file.publicUrl || file.PublicUrl || file.href || file.Href || "",
+          file.url || file.Url || file.URL || file.downloadUrl || file.DownloadUrl || file.contentUrl || file.ContentUrl || file.fileUrl || file.FileUrl || file.publicUrl || file.PublicUrl || file.href || file.Href || file.signedUrl || file.SignedUrl || file.presignedUrl || file.PresignedUrl || "",
         ),
       };
     });
@@ -620,9 +627,12 @@
       "#desk-cw-attach{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
       "#desk-cw-file{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0}" +
       "#desk-cw-attach.is-disabled{opacity:.4;pointer-events:none}" +
-      "#desk-cw-files{display:none;gap:6px;flex-wrap:wrap;padding:8px 12px 0}" +
+      "#desk-cw-files{display:none;padding:8px 12px 0}" +
       "#desk-cw-files.open{display:flex}" +
-      "#desk-cw-file-chip{font-size:11px;background:#f1f5f9;color:#334155;border-radius:999px;padding:2px 8px}" +
+      "#desk-cw-file-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:999px;padding:3px 4px 3px 10px;font-size:12px;line-height:1.3}" +
+      "#desk-cw-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}" +
+      "#desk-cw-file-x{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}" +
+      "#desk-cw-file-x:hover{background:#e2e8f0;color:#0f172a}" +
       "#desk-cw-confirm{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.4}" +
       "#desk-cw-load-earlier{display:block;margin:0 auto 8px;border:0;background:transparent;color:#64748b;font-size:12px;cursor:pointer;text-decoration:underline}";
     document.head.appendChild(style);
@@ -698,7 +708,7 @@
       '<div id="desk-cw-thread"></div>' +
       '<div id="desk-cw-files"></div>' +
       '<form id="desk-cw-form-wrap">' +
-      '<label id="desk-cw-attach" aria-label="Attach files">' + CLIP_ICON + '<input id="desk-cw-file" type="file" multiple tabindex="-1" /></label>' +
+      '<label id="desk-cw-attach" aria-label="Attach a file">' + CLIP_ICON + '<input id="desk-cw-file" type="file" tabindex="-1" /></label>' +
       '<input id="desk-cw-input" type="text" placeholder="Type a message..." autocomplete="off" />' +
       '<button type="submit" id="desk-cw-send" aria-label="Send">' + SEND_ICON + "</button>" +
       "</form>" +
@@ -1187,10 +1197,22 @@
         filesEl.innerHTML = "";
         return;
       }
+      var file = pendingFiles[0];
       filesEl.classList.add("open");
-      filesEl.innerHTML = pendingFiles.map(function (file) {
-        return '<span class="desk-cw-file-chip">' + escapeHtmlLive(file.name || "file") + "</span>";
-      }).join("");
+      filesEl.innerHTML =
+        '<span class="desk-cw-file-chip"><span class="desk-cw-file-name">' +
+        escapeHtmlLive(file.name || "file") +
+        '</span><button type="button" class="desk-cw-file-x" aria-label="Remove attachment">&times;</button></span>';
+      var removeBtn = filesEl.querySelector(".desk-cw-file-x");
+      if (removeBtn) {
+        removeBtn.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          pendingFiles = [];
+          if (fileInput) fileInput.value = "";
+          renderPendingFiles();
+        });
+      }
     }
 
     function postVisitorMessage(ticketId, bodyText) {
@@ -1204,7 +1226,7 @@
       if (files.length) {
         var form = new FormData();
         if (text) form.append("bodyText", text);
-        for (var i = 0; i < files.length; i++) form.append("attachments", files[i]);
+        form.append("attachments", files[0]);
         url = chatWidgetMessagesUrl(config, id) + "/multipart";
         options = { method: "POST", body: form };
       } else {
@@ -1487,23 +1509,35 @@
       var href = resolveAttachmentUrl(url);
       var name = String(fileName || "attachment").trim() || "attachment";
       if (!href) return;
-      publicFetch(href, { method: "GET", headers: { Accept: "*/*" } })
-        .then(function (res) {
-          if (!res.ok) return null;
-          return res.blob();
-        })
-        .then(function (blob) {
-          if (!blob) return;
-          var objectUrl = URL.createObjectURL(blob);
-          var link = document.createElement("a");
-          link.href = objectUrl;
-          link.download = name;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
-        })
-        .catch(function () {});
+      var origin = deskOriginFromApiBase(config.apiBaseUrl);
+      var apiBase = String(config.apiBaseUrl || "");
+      var onApi = (origin && href.indexOf(origin) === 0) || (apiBase && href.indexOf(apiBase) === 0);
+      var request = onApi
+        ? publicFetch(href, { method: "GET", headers: { Accept: "*/*" } })
+        : fetch(href, { method: "GET", credentials: "omit" });
+      request.then(function (res) {
+        if (!res || !res.ok) throw new Error("download");
+        return res.blob();
+      }).then(function (blob) {
+        if (!blob) return;
+        var objectUrl = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+      }).catch(function () {
+        var link = document.createElement("a");
+        link.href = href;
+        link.download = name;
+        link.target = "_blank";
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      });
     }
 
     function renderTicketThread(ticketId) {
@@ -1548,9 +1582,16 @@
         var attachmentHtml = "";
         var attachments = msg.attachments || [];
         if (attachments.length) {
+          var visibleFiles = [];
+          for (var v = 0; v < attachments.length; v++) {
+            var candidate = attachments[v] || {};
+            if (candidate.isInline) continue;
+            visibleFiles.push(candidate);
+          }
+          if (!visibleFiles.length) visibleFiles = attachments.slice(0, 1);
           attachmentHtml = '<div class="desk-cw-thread-files">';
-          for (var a = 0; a < attachments.length; a++) {
-            var file = attachments[a] || {};
+          for (var a = 0; a < visibleFiles.length; a++) {
+            var file = visibleFiles[a] || {};
             var fileName = String(file.fileName || file.name || file.FileName || "Attachment");
             var fileUrl = resolveAttachmentUrl(file.url || "");
             attachmentHtml +=
@@ -1947,7 +1988,7 @@
       }
     }
 
-    var configLoaded = false;
+    var configRequested = false;
     function refreshTicketFormFromConfig() {
       if (!config.apiBaseUrl || !config.chatWidgetId) return;
       var statusEl = document.getElementById("desk-cw-submit-status");
@@ -1958,7 +1999,7 @@
       }
       fetchChatWidgetConfig(config).then(function (live) {
         if (!live) return;
-        configLoaded = true;
+        configRequested = true;
         if (live.title) {
           widgetTitle = live.title;
           document.getElementById("desk-cw-title").textContent = live.title;
@@ -1970,8 +2011,14 @@
           widgetTagline = live.tagline;
           if (view === "chat" && taglineEl) taglineEl.textContent = live.tagline;
         }
-        if (live.welcome) config.welcome = live.welcome;
-        if (live.color) config.color = live.color;
+        if (live.welcome) {
+          var previousWelcome = config.welcome;
+          config.welcome = live.welcome;
+          var greetings = chatEl ? chatEl.querySelectorAll(".desk-cw-bubble.bot") : [];
+          if (greetings.length === 1 && greetings[0].textContent === previousWelcome) {
+            greetings[0].textContent = live.welcome;
+          }
+        }
         if (live.logoUrl) {
           config.logoUrl = live.logoUrl;
           applyLogo(live.logoUrl);
@@ -1994,6 +2041,10 @@
       launcher.setAttribute("aria-label", open ? "Close chat" : "Open chat");
       launcher.innerHTML = open ? CLOSE_ICON : CHAT_ICON;
       if (open) {
+        if (!configRequested) {
+          configRequested = true;
+          refreshTicketFormFromConfig();
+        }
         scrollChatToBottom();
       } else {
         setView("chat");
@@ -2010,8 +2061,6 @@
     refreshSessionConversations();
     if (askFields && askFields.length) {
       renderAskFields(askFields);
-    } else if (BAKED.shared) {
-      refreshTicketFormFromConfig();
     }
 
     launcher.addEventListener("click", function () { setOpen(!open); });
@@ -2166,7 +2215,7 @@
 
     if (fileInput) {
       fileInput.addEventListener("change", function () {
-        pendingFiles = fileInput.files ? Array.prototype.slice.call(fileInput.files) : [];
+        pendingFiles = fileInput.files && fileInput.files.length ? [fileInput.files[0]] : [];
         renderPendingFiles();
       });
     }
@@ -2993,27 +3042,7 @@
       return;
     }
     function start(cfg) { mount(cfg); }
-    if (BAKED.shared) {
-      fetchChatWidgetConfig(base).then(function (live) {
-        var cfg = Object.assign({}, base);
-        if (live) {
-          if (live.title) cfg.title = live.title;
-          if (live.welcome) cfg.welcome = live.welcome;
-          if (live.tagline) cfg.tagline = live.tagline;
-          if (live.color) cfg.color = live.color;
-          if (live.launcherIcon) cfg.launcherIcon = live.launcherIcon;
-          if (live.position === "bottom-left" || live.position === "bottom-right") {
-            cfg.position = live.position;
-          }
-          if (live.logoUrl) cfg.logoUrl = live.logoUrl;
-          cfg.captureFields = live.ticketDetails || [];
-          cfg.askFields = (live.ticketDetails || []).filter(isAskCustomerField);
-        }
-        start(cfg);
-      });
-    } else {
-      start(base);
-    }
+    start(base);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
