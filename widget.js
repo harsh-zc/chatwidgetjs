@@ -28,6 +28,7 @@
 
   function readScriptConfig() {
     var widgetId =
+      scriptAttr("data-chatbot-id") ||
       scriptAttr("data-widget-id") ||
       scriptAttr("data-chat-widget-id") ||
       BAKED.chatWidgetId ||
@@ -163,8 +164,80 @@
     return config.apiBaseUrl + "/chat-widgets/" + encodeURIComponent(config.chatWidgetId) + "/config";
   }
 
-  function chatWidgetTicketsUrl(config) {
-    return config.apiBaseUrl + "/chat-widgets/" + encodeURIComponent(config.chatWidgetId) + "/tickets";
+  function chatWidgetConversationsUrl(config) {
+    return config.apiBaseUrl + "/chat-widgets/" + encodeURIComponent(config.chatWidgetId) + "/conversations";
+  }
+
+  function chatWidgetSessionConversationsUrl(config) {
+    return config.apiBaseUrl + "/chat-widgets/" + encodeURIComponent(config.chatWidgetId) + "/session/conversations";
+  }
+
+  function chatWidgetMessagesUrl(config, ticketId) {
+    return chatWidgetConversationsUrl(config) + "/" + encodeURIComponent(ticketId) + "/messages";
+  }
+
+  function chatWidgetReadUrl(config, ticketId) {
+    return chatWidgetConversationsUrl(config) + "/" + encodeURIComponent(ticketId) + "/read";
+  }
+
+  function chatWidgetResolveUrl(config, ticketId) {
+    return chatWidgetConversationsUrl(config) + "/" + encodeURIComponent(ticketId) + "/resolve";
+  }
+
+  function magicQuery(config, ticketId, sessionId) {
+    return (
+      "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) +
+      "&ticketId=" + encodeURIComponent(ticketId) +
+      "&sessionId=" + encodeURIComponent(sessionId || "")
+    );
+  }
+
+  function magicConversationsUrl(config, ticketId, sessionId) {
+    return config.apiBaseUrl + "/chat-widgets/conversations?" + magicQuery(config, ticketId, sessionId);
+  }
+
+  function magicMessagesUrl(config, ticketId, sessionId) {
+    return config.apiBaseUrl + "/chat-widgets/conversations/messages?" + magicQuery(config, ticketId, sessionId);
+  }
+
+  function magicResolveUrl(config, ticketId, sessionId) {
+    return config.apiBaseUrl + "/chat-widgets/conversations/resolve?" + magicQuery(config, ticketId, sessionId);
+  }
+
+  function deskOriginFromApiBase(apiBaseUrl) {
+    return String(apiBaseUrl || "").replace(/\/+$/, "").replace(/\/api\/desk$/i, "");
+  }
+
+  function apiErrorText(body, fallback) {
+    if (!body || typeof body !== "object") return fallback;
+    return String(
+      body.message || body.Message || body.errorCode || body.ErrorCode || fallback,
+    );
+  }
+
+  function mapPublicMessage(item) {
+    if (!item || typeof item !== "object") return null;
+    var sender = String(item.senderType || item.SenderType || "").trim();
+    var senderKey = sender.toLowerCase();
+    var role = senderKey === "customer" ? "user" : "bot";
+    var text = String(item.bodyText || item.BodyText || "").trim();
+    if (!text) {
+      var html = String(item.bodyHtml || item.BodyHtml || "");
+      text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    }
+    var id = String(item.messageId || item.MessageId || "").trim();
+    if (!id && !text) return null;
+    var attachments = item.attachments || item.Attachments || [];
+    return {
+      id: id || ("msg-" + Date.now()),
+      role: role,
+      senderType: senderKey || "system",
+      senderName: String(item.senderName || item.SenderName || "").trim(),
+      text: text,
+      at: item.createdAt || item.CreatedAt || "",
+      replyToMessageId: item.replyToMessageId || item.ReplyToMessageId || null,
+      attachments: Array.isArray(attachments) ? attachments : [],
+    };
   }
 
   /** Name/Email/Subject/Description — owned by chat flow, never ask-fields. */
@@ -202,7 +275,9 @@
       if (!item || typeof item !== "object") return null;
       var id = String(item.id || item.Id || "").trim();
       var fieldRef = String(item.fieldRef || item.FieldRef || "").trim();
-      if (!id || !fieldRef) return null;
+      if (!id && !fieldRef) return null;
+      if (!fieldRef) fieldRef = id;
+      if (!id) id = fieldRef;
       var sourceRaw = String(item.source || item.Source || "preset").trim();
       var source =
         sourceRaw === "ask_customer"
@@ -246,6 +321,7 @@
     if (config.departmentId) headers.DepartmentId = config.departmentId;
     return fetch(url, {
       method: "GET",
+      credentials: "include",
       headers: headers,
     }).then(function (res) {
       if (!res.ok) throw new Error("Config request failed");
@@ -253,15 +329,19 @@
     }).then(function (body) {
       var data = body && (body.Data != null ? body.Data : body.data != null ? body.data : body);
       if (!data || typeof data !== "object") return null;
+      var name = String(data.name || data.Name || data.title || data.Title || "").trim();
+      var headerText = String(data.headerText || data.HeaderText || data.tagline || data.Tagline || "").trim();
       return {
-        title: String(data.Name || data.name || data.Title || data.title || "").trim(),
-        welcome: String(data.Greeting || data.greeting || data.WelcomeMessage || data.welcomeMessage || "").trim(),
-        tagline: String(data.Tagline || data.tagline || "").trim(),
-        color: String(data.PrimaryColor || data.primaryColor || data.Color || data.color || "").trim(),
-        launcherIcon: String(data.LauncherIcon || data.launcherIcon || "").trim(),
-        position: String(data.Position || data.position || "").trim(),
-        ticketDetails: normalizeTicketDetails(data.TicketDetails || data.ticketDetails || []),
-        isEnabled: data.IsEnabled != null ? Boolean(data.IsEnabled) : data.isEnabled != null ? Boolean(data.isEnabled) : true,
+        title: name,
+        welcome: String(data.greeting || data.Greeting || data.welcomeMessage || data.WelcomeMessage || "").trim(),
+        tagline: headerText,
+        color: String(data.brandColor || data.BrandColor || data.primaryColor || data.PrimaryColor || data.color || data.Color || "").trim(),
+        logoUrl: String(data.logoUrl || data.LogoUrl || "").trim(),
+        ticketCreationMessage: String(data.ticketCreationMessage || data.TicketCreationMessage || "").trim(),
+        launcherIcon: String(data.launcherIcon || data.LauncherIcon || "").trim(),
+        position: String(data.position || data.Position || "").trim(),
+        ticketDetails: normalizeTicketDetails(data.ticketDetails || data.TicketDetails || []),
+        isEnabled: data.isEnabled != null ? Boolean(data.isEnabled) : data.IsEnabled != null ? Boolean(data.IsEnabled) : true,
       };
     }).catch(function () {
       return null;
@@ -407,6 +487,7 @@
   var CHAT_ICON = DEFAULT_CHAT_ICON;
   var CLOSE_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   var SEND_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var CLIP_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var BACK_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var TICKETS_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 5v2M13 17v2M13 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   var PLUS_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>';
@@ -521,7 +602,15 @@
 
     var style = document.createElement("style");
     style.id = "desk-cw-style";
-    style.textContent = css(config.color, config.position === "bottom-left");
+    style.textContent = css(config.color, config.position === "bottom-left") +
+      "#desk-cw-avatar img{width:28px;height:28px;border-radius:999px;object-fit:cover;display:block}" +
+      "#desk-cw-attach{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
+      "#desk-cw-files{display:none;gap:6px;flex-wrap:wrap;padding:0 12px 8px}" +
+      "#desk-cw-files.open{display:flex}" +
+      "#desk-cw-file-chip{font-size:11px;background:#f1f5f9;color:#334155;border-radius:999px;padding:2px 8px}" +
+      "#desk-cw-confirm{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.4}" +
+      "#desk-cw-quote{margin:0 0 4px;padding:4px 6px;border-left:2px solid rgb(15 23 42 / .25);font-size:11px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+      "#desk-cw-load-earlier{display:block;margin:0 auto 8px;border:0;background:transparent;color:#64748b;font-size:12px;cursor:pointer;text-decoration:underline}";
     document.head.appendChild(style);
 
     var askFields = config.askFields || [];
@@ -587,16 +676,18 @@
       '<div id="desk-cw-ticket">' +
       '<label class="desk-cw-field" id="desk-cw-name-field" data-error-for="name"><span>Name <span class="req">*</span></span><input id="desk-cw-name" type="text" name="name" autocomplete="name" placeholder="e.g. Aditi Sharma" /><p class="desk-cw-error" data-error-msg="name" hidden></p></label>' +
       '<label class="desk-cw-field" id="desk-cw-email-field" data-error-for="email"><span>Email <span class="req">*</span></span><input id="desk-cw-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" /><p class="desk-cw-error" data-error-msg="email" hidden></p></label>' +
-      '<label class="desk-cw-field" id="desk-cw-description-field" data-error-for="description"><span>Description <span class="req">*</span></span><textarea id="desk-cw-description" rows="3" placeholder="Add more details..."></textarea><p class="desk-cw-error" data-error-msg="description" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-description-field" data-error-for="description"><span>How can we help you? <span class="req">*</span></span><textarea id="desk-cw-description" rows="3" placeholder="Tell us what you need"></textarea><p class="desk-cw-error" data-error-msg="description" hidden></p></label>' +
       '<div id="desk-cw-ask-fields">' + "" + '</div>' +
       '<p id="desk-cw-submit-status" class="desk-cw-error" hidden style="display:none;margin:0 0 8px"></p>' +
       '<button type="button" id="desk-cw-submit">Submit request</button>' +
       "</div>" +
       '<div id="desk-cw-thread"></div>' +
       '<form id="desk-cw-form-wrap">' +
+      '<label id="desk-cw-attach" aria-label="Attach files">' + CLIP_ICON + '<input id="desk-cw-file" type="file" multiple hidden /></label>' +
       '<input id="desk-cw-input" type="text" placeholder="Type a message..." autocomplete="off" />' +
       '<button type="submit" id="desk-cw-send" aria-label="Send">' + SEND_ICON + "</button>" +
       "</form>" +
+      '<div id="desk-cw-files"></div>' +
       '<div id="desk-cw-closed-actions">' +
       '<div id="desk-cw-closed-btns">' +
       '<button type="button" id="desk-cw-reopen">' + ROTATE_ICON + "Reopen request</button>" +
@@ -656,6 +747,19 @@
     var identityKey = storagePrefix + "_identity";
     var chatHistoryKey = storagePrefix + "_chat";
     var ticketsKey = storagePrefix + "_tickets";
+    var sessionKey = storagePrefix + "_session";
+    var sessionTickets = null;
+    var remoteThreads = {};
+    var threadPaging = {};
+    var confirmationByTicket = {};
+    var readWatermark = {};
+    var preferMagicRoutes = false;
+    var pendingFiles = [];
+    var hubSocket = null;
+    var hubInvokeId = 0;
+    var hubStopped = false;
+    var fileInput = document.getElementById("desk-cw-file");
+    var filesEl = document.getElementById("desk-cw-files");
     var MAX_CHAT_MESSAGES = 50;
     var MAX_STORED_TICKETS = 20;
     var MAX_TICKET_MESSAGES = 100;
@@ -742,6 +846,380 @@
         at: new Date().toISOString(),
       });
       saveChatHistory(messages);
+    }
+
+    function rememberSessionId(id) {
+      var next = String(id || "").trim();
+      if (!next) return getOrCreateSessionId();
+      try {
+        window.localStorage.setItem(sessionKey, next);
+      } catch (e) {}
+      return next;
+    }
+
+    function getOrCreateSessionId() {
+      try {
+        var existing = String(window.localStorage.getItem(sessionKey) || "").trim();
+        if (existing) return existing;
+      } catch (e) {}
+      var fromQuery = queryFirstValue(readUrlQuery(), ["sessionId"]);
+      if (fromQuery) return rememberSessionId(fromQuery);
+      var id = "";
+      try {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+          id = window.crypto.randomUUID();
+        }
+      } catch (e2) {}
+      if (!id) {
+        id = "sess-" + Date.now().toString(16) + "-" + Math.random().toString(16).slice(2);
+      }
+      return rememberSessionId(id);
+    }
+
+    function publicHeaders(extra, isForm) {
+      var headers = {
+        Accept: "application/json",
+        "X-Desk-Chat-Session": getOrCreateSessionId(),
+      };
+      if (!isForm) headers["Content-Type"] = "application/json";
+      if (extra) {
+        var keys = Object.keys(extra);
+        for (var i = 0; i < keys.length; i++) headers[keys[i]] = extra[keys[i]];
+      }
+      if (isForm) delete headers["Content-Type"];
+      if (config.orgId) headers["X-Organisation-Id"] = config.orgId;
+      if (config.departmentId) headers.DepartmentId = config.departmentId;
+      return headers;
+    }
+
+    function publicFetch(url, options) {
+      var opts = options || {};
+      var sendJson = typeof opts.body === "string";
+      opts.credentials = "include";
+      opts.headers = publicHeaders(opts.headers, !sendJson);
+      return fetch(url, opts);
+    }
+
+    function envelopeData(body) {
+      if (!body || typeof body !== "object") return null;
+      if (body.data != null) return body.data;
+      if (body.Data != null) return body.Data;
+      return body;
+    }
+
+    function isResolvedStatus(raw) {
+      var value = String(raw || "").trim().toLowerCase();
+      return value === "resolved" || value === "closed" || value === "close";
+    }
+
+    function mapSessionConversation(item) {
+      if (!item || typeof item !== "object") return null;
+      var ticketId = String(item.id || item.Id || item.ticketId || item.TicketId || "").trim();
+      if (!ticketId) return null;
+      var statusRaw = item.status || item.Status || "Open";
+      return {
+        ticketId: ticketId,
+        ticketNumber: String(item.number || item.Number || item.ticketNumber || item.TicketNumber || "").trim(),
+        subject: String(item.subject || item.Subject || "").trim(),
+        description: "",
+        createdAt: item.updatedAt || item.UpdatedAt || item.createdAt || item.CreatedAt || "",
+        status: isResolvedStatus(statusRaw) ? "resolved" : "open",
+        statusLabel: String(statusRaw || "Open").trim() || "Open",
+      };
+    }
+
+    function visibleTickets() {
+      return sessionTickets ? sessionTickets : loadCreatedTickets();
+    }
+
+    function refreshSessionConversations() {
+      if (!config.apiBaseUrl || !config.chatWidgetId) return Promise.resolve();
+      var headers = {
+        Accept: "application/json",
+        "X-Desk-Chat-Session": getOrCreateSessionId(),
+      };
+      if (config.orgId) headers["X-Organisation-Id"] = config.orgId;
+      if (config.departmentId) headers.DepartmentId = config.departmentId;
+      return publicFetch(chatWidgetSessionConversationsUrl(config), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            return { ok: res.ok, body: body };
+          }).catch(function () {
+            return { ok: res.ok, body: null };
+          });
+        })
+        .then(function (result) {
+          if (!result.ok || !result.body) return;
+          var data = result.body.data != null ? result.body.data : result.body.Data;
+          if (!Array.isArray(data)) return;
+          sessionTickets = data.map(mapSessionConversation).filter(Boolean);
+          if (view === "tickets") renderTicketsList();
+          updateLatestBanner();
+        })
+        .catch(function () {});
+    }
+
+    function threadMessages(ticketId) {
+      var list = remoteThreads[ticketId];
+      return Array.isArray(list) ? list : [];
+    }
+
+    function upsertThreadMessage(ticketId, message) {
+      if (!ticketId || !message) return;
+      var list = threadMessages(ticketId).slice();
+      var idx = -1;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id && list[i].id === message.id) idx = i;
+      }
+      if (idx >= 0) list[idx] = message;
+      else list.push(message);
+      list.sort(function (a, b) {
+        return String(a.at || "").localeCompare(String(b.at || ""));
+      });
+      remoteThreads[ticketId] = list;
+    }
+
+    function messagesRequestUrl(ticketId, paginationToken) {
+      var sessionId = getOrCreateSessionId();
+      var base = preferMagicRoutes
+        ? magicMessagesUrl(config, ticketId, sessionId)
+        : chatWidgetMessagesUrl(config, ticketId);
+      var joiner = base.indexOf("?") >= 0 ? "&" : "?";
+      var url = base + joiner + "limit=50";
+      if (paginationToken) url += "&paginationToken=" + encodeURIComponent(paginationToken);
+      return url;
+    }
+
+    function loadMessages(ticketId, paginationToken) {
+      var id = String(ticketId || "").trim();
+      if (!id || !config.apiBaseUrl) return Promise.resolve();
+      return publicFetch(messagesRequestUrl(id, paginationToken), { method: "GET" })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            return { ok: res.ok, body: body };
+          }).catch(function () {
+            return { ok: res.ok, body: null };
+          });
+        })
+        .then(function (result) {
+          if (!result.ok) return;
+          var data = envelopeData(result.body);
+          var rows = Array.isArray(data) ? data : (data && (data.messages || data.Messages || data.items || data.Items)) || [];
+          if (!Array.isArray(rows)) rows = [];
+          var mapped = rows.map(mapPublicMessage).filter(Boolean);
+          if (paginationToken) {
+            var existing = threadMessages(id);
+            for (var i = 0; i < existing.length; i++) mapped.push(existing[i]);
+          }
+          var seen = {};
+          var next = [];
+          for (var j = 0; j < mapped.length; j++) {
+            var mid = mapped[j].id;
+            if (mid && seen[mid]) continue;
+            if (mid) seen[mid] = true;
+            next.push(mapped[j]);
+          }
+          next.sort(function (a, b) {
+            return String(a.at || "").localeCompare(String(b.at || ""));
+          });
+          remoteThreads[id] = next;
+          var token = result.body && (result.body.paginationToken || result.body.PaginationToken);
+          threadPaging[id] = token ? String(token) : "";
+          if (selectedTicketId === id && view === "ticket-detail") {
+            renderTicketThread(id);
+            markConversationRead(id);
+          }
+        })
+        .catch(function () {});
+    }
+
+    function markConversationRead(ticketId) {
+      var id = String(ticketId || "").trim();
+      if (!id || view !== "ticket-detail" || !open) return;
+      var msgs = threadMessages(id);
+      var watermark = "";
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i] && msgs[i].role !== "user" && msgs[i].id) {
+          watermark = msgs[i].id;
+          break;
+        }
+      }
+      if (!watermark || readWatermark[id] === watermark) return;
+      readWatermark[id] = watermark;
+      publicFetch(chatWidgetReadUrl(config, id), {
+        method: "POST",
+        body: JSON.stringify({ upToMessageId: watermark }),
+      }).catch(function () {
+        readWatermark[id] = "";
+      });
+    }
+
+    function applyHubEvent(payload) {
+      if (!payload || typeof payload !== "object") return;
+      var type = String(payload.type || payload.Type || "");
+      var ticketId = String(payload.ticketId || payload.TicketId || "").trim();
+      if (type === "message.created" && ticketId) {
+        var message = mapPublicMessage(payload.message || payload.Message || {});
+        if (message) upsertThreadMessage(ticketId, message);
+        if (selectedTicketId === ticketId && view === "ticket-detail") {
+          renderTicketThread(ticketId);
+          markConversationRead(ticketId);
+        }
+        refreshSessionConversations();
+        return;
+      }
+      if (type === "ticket.status.changed" && ticketId) {
+        var statusRaw = payload.status || payload.Status || "";
+        var resolved = isResolvedStatus(statusRaw);
+        updateCreatedTicket(ticketId, { status: resolved ? "resolved" : "open" });
+        if (sessionTickets) {
+          sessionTickets = sessionTickets.map(function (item) {
+            if (!item || item.ticketId !== ticketId) return item;
+            return Object.assign({}, item, {
+              status: resolved ? "resolved" : "open",
+              statusLabel: String(statusRaw || (resolved ? "Resolved" : "Open")),
+            });
+          });
+        }
+        if (selectedTicketId === ticketId) setView("ticket-detail");
+      }
+    }
+
+    function invokeRefreshTickets() {
+      if (!hubSocket || hubSocket.readyState !== 1) return;
+      hubInvokeId += 1;
+      try {
+        hubSocket.send(JSON.stringify({
+          type: 1,
+          invocationId: String(hubInvokeId),
+          target: "RefreshTickets",
+          arguments: [],
+        }) + "\u001e");
+      } catch (e) {}
+    }
+
+    function ensureRealtime() {
+      if (hubStopped || hubSocket || !config.apiBaseUrl || !config.chatWidgetId) return;
+      var sessionId = getOrCreateSessionId();
+      if (!sessionId) return;
+      var origin = deskOriginFromApiBase(config.apiBaseUrl);
+      var hubPath = origin + "/realtime/chat-widget";
+      var query = "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) + "&sessionId=" + encodeURIComponent(sessionId);
+      var negotiateUrl = hubPath + "/negotiate?" + query + "&negotiateVersion=1";
+      publicFetch(negotiateUrl, { method: "POST" })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            return { ok: res.ok, body: body };
+          }).catch(function () {
+            return { ok: false, body: null };
+          });
+        })
+        .then(function (result) {
+          if (!result.ok || !result.body || hubStopped) return;
+          var neg = result.body;
+          var token = neg.connectionToken || neg.connectionId || "";
+          var wsUrl = "";
+          if (neg.url) {
+            wsUrl = String(neg.url);
+            if (neg.accessToken) {
+              wsUrl += (wsUrl.indexOf("?") >= 0 ? "&" : "?") + "access_token=" + encodeURIComponent(neg.accessToken);
+            }
+          } else if (token) {
+            wsUrl = hubPath.replace(/^http/i, "ws") + "?id=" + encodeURIComponent(token) + "&" + query;
+          }
+          if (!wsUrl || typeof WebSocket === "undefined") return;
+          var socket = new WebSocket(wsUrl);
+          hubSocket = socket;
+          var buffer = "";
+          socket.onopen = function () {
+            try {
+              socket.send('{"protocol":"json","version":1}\u001e');
+            } catch (e) {}
+            invokeRefreshTickets();
+          };
+          socket.onmessage = function (event) {
+            buffer += String(event.data || "");
+            var parts = buffer.split("\u001e");
+            buffer = parts.pop() || "";
+            for (var i = 0; i < parts.length; i++) {
+              var raw = parts[i];
+              if (!raw) continue;
+              var msg = null;
+              try { msg = JSON.parse(raw); } catch (e2) { continue; }
+              if (!msg) continue;
+              if (msg.type === 6) {
+                try { socket.send('{"type":6}\u001e'); } catch (e3) {}
+                continue;
+              }
+              if (msg.type === 1 && msg.target) {
+                var target = String(msg.target);
+                var arg = msg.arguments && msg.arguments[0];
+                if (target === "chatWidget.event") applyHubEvent(arg);
+                else if (target === "session.tickets.updated" || target === "connected") {
+                  refreshSessionConversations();
+                }
+              }
+            }
+          };
+          socket.onclose = function () {
+            if (hubSocket === socket) hubSocket = null;
+            if (!hubStopped) {
+              window.setTimeout(function () { ensureRealtime(); }, 2000);
+            }
+          };
+        })
+        .catch(function () {});
+    }
+
+    function renderPendingFiles() {
+      if (!filesEl) return;
+      if (!pendingFiles.length) {
+        filesEl.classList.remove("open");
+        filesEl.innerHTML = "";
+        return;
+      }
+      filesEl.classList.add("open");
+      filesEl.innerHTML = pendingFiles.map(function (file) {
+        return '<span class="desk-cw-file-chip">' + escapeHtmlLive(file.name || "file") + "</span>";
+      }).join("");
+    }
+
+    function postVisitorMessage(ticketId, bodyText) {
+      var id = String(ticketId || "").trim();
+      var text = String(bodyText || "").trim();
+      var files = pendingFiles.slice();
+      if (!id || (!text && !files.length)) return Promise.resolve();
+      var sessionId = getOrCreateSessionId();
+      var url;
+      var options;
+      if (files.length) {
+        var form = new FormData();
+        if (text) form.append("bodyText", text);
+        for (var i = 0; i < files.length; i++) form.append("attachments", files[i]);
+        url = chatWidgetMessagesUrl(config, id) + "/multipart";
+        options = { method: "POST", body: form };
+      } else {
+        url = preferMagicRoutes ? magicMessagesUrl(config, id, sessionId) : chatWidgetMessagesUrl(config, id);
+        options = { method: "POST", body: JSON.stringify({ bodyText: text }) };
+      }
+      pendingFiles = [];
+      renderPendingFiles();
+      if (fileInput) fileInput.value = "";
+      return publicFetch(url, options).then(function (res) {
+        return res.json().then(function (body) {
+          return { ok: res.ok, body: body };
+        }).catch(function () {
+          return { ok: res.ok, body: null };
+        });
+      }).then(function (result) {
+        if (!result.ok) return result;
+        var created = mapPublicMessage(envelopeData(result.body) || {});
+        if (created && created.text) upsertThreadMessage(id, created);
+        return loadMessages(id).then(function () { return result; });
+      });
     }
 
     function loadCreatedTickets() {
@@ -910,6 +1388,24 @@
       for (var i = 0; i < list.length; i++) {
         if (list[i] && String(list[i].ticketId) === id) return list[i];
       }
+      var remote = visibleTickets();
+      for (var j = 0; j < remote.length; j++) {
+        if (remote[j] && String(remote[j].ticketId) === id) {
+          var apiMessages = threadMessages(id);
+          return Object.assign({}, remote[j], {
+            messages: apiMessages,
+          });
+        }
+      }
+      if (threadMessages(id).length || confirmationByTicket[id]) {
+        return {
+          ticketId: id,
+          ticketNumber: "",
+          subject: "",
+          status: "open",
+          messages: threadMessages(id),
+        };
+      }
       return null;
     }
 
@@ -917,7 +1413,7 @@
       if (!ticketsItemsEl) return;
       if (ticketsHeadingEl) ticketsHeadingEl.textContent = "My requests";
       if (ticketsNewBtn) ticketsNewBtn.style.display = "inline-flex";
-      var list = loadCreatedTickets();
+      var list = visibleTickets();
       if (!list.length) {
         ticketsItemsEl.innerHTML =
           '<p id="desk-cw-tickets-empty">No requests yet. Send a message to start one.</p>';
@@ -927,7 +1423,8 @@
         .map(function (item) {
           var subject = String(item.subject || "").trim() || "Support request";
           var description =
-            String(item.description || "").trim() || subject;
+            String(item.statusLabel || "").trim() ||
+            (item.status === "resolved" ? "Resolved" : "Open");
           var when = formatTicketWhen(item.createdAt);
           var numberLabel = formatTicketNumber(item.ticketNumber);
           var statusSuffix = item.status === "resolved" ? " · Resolved" : "";
@@ -967,36 +1464,82 @@
     function renderTicketThread(ticketId) {
       if (!threadEl) return;
       var ticket = findCreatedTicket(ticketId);
-      if (!ticket) {
+      var messages = threadMessages(ticketId);
+      if (!messages.length && ticket && Array.isArray(ticket.messages) && ticket.messages.length) {
+        messages = ticket.messages;
+      }
+      var confirm = String(confirmationByTicket[ticketId] || "").trim();
+      var hasSystemAck = false;
+      for (var s = 0; s < messages.length; s++) {
+        if (messages[s] && messages[s].senderType === "system" && messages[s].text === confirm) {
+          hasSystemAck = true;
+        }
+      }
+      if (!ticket && !messages.length && !confirm) {
         threadEl.innerHTML =
           '<p id="desk-cw-tickets-empty">Ticket details are not available.</p>';
         return;
       }
-      var messages = Array.isArray(ticket.messages) ? ticket.messages : [];
-      if (!messages.length) {
+      if (!messages.length && !confirm) {
         threadEl.innerHTML = '<p id="desk-cw-tickets-empty">No messages yet.</p>';
         return;
       }
-      var html =
-        '<div class="desk-cw-thread-day"><span>' +
-        escapeHtmlLive(formatDayLabel(messages[0] && messages[0].at)) +
-        "</span></div>";
+      var byId = {};
+      for (var b = 0; b < messages.length; b++) {
+        if (messages[b] && messages[b].id) byId[messages[b].id] = messages[b];
+      }
+      var html = "";
+      if (threadPaging[ticketId]) {
+        html += '<button type="button" id="desk-cw-load-earlier">Load earlier</button>';
+      }
+      if (confirm && !hasSystemAck) {
+        html += '<p id="desk-cw-confirm">' + escapeHtmlLive(confirm) + "</p>";
+      }
+      if (messages.length) {
+        html +=
+          '<div class="desk-cw-thread-day"><span>' +
+          escapeHtmlLive(formatDayLabel(messages[0] && messages[0].at)) +
+          "</span></div>";
+      }
       for (var i = 0; i < messages.length; i++) {
         var msg = messages[i];
         var role = msg.role === "user" ? "user" : "bot";
+        var quote = "";
+        if (msg.replyToMessageId && byId[msg.replyToMessageId]) {
+          quote =
+            '<p id="desk-cw-quote">' +
+            escapeHtmlLive(String(byId[msg.replyToMessageId].text || "Reply")) +
+            "</p>";
+        }
+        var attachmentHtml = "";
+        var attachments = msg.attachments || [];
+        for (var a = 0; a < attachments.length; a++) {
+          var file = attachments[a] || {};
+          var fileName = String(file.fileName || file.name || file.FileName || "Attachment");
+          attachmentHtml += '<p class="desk-cw-thread-time">' + escapeHtmlLive(fileName) + "</p>";
+        }
         html +=
           '<div class="desk-cw-thread-msg ' +
           role +
           '">' +
           '<div class="desk-cw-thread-body">' +
           '<div class="desk-cw-thread-bubble">' +
+          quote +
           '<p class="desk-cw-thread-bubble-text">' +
           escapeHtmlLive(String(msg.text || "")) +
-          '</p><p class="desk-cw-thread-time">' +
+          "</p>" +
+          attachmentHtml +
+          '<p class="desk-cw-thread-time">' +
           escapeHtmlLive(formatMessageTime(msg.at)) +
           "</p></div></div></div>";
       }
       threadEl.innerHTML = html;
+      var earlier = document.getElementById("desk-cw-load-earlier");
+      if (earlier) {
+        earlier.addEventListener("click", function () {
+          loadMessages(ticketId, threadPaging[ticketId]);
+        });
+      }
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           threadEl.scrollTop = threadEl.scrollHeight;
@@ -1006,7 +1549,7 @@
 
     function updateLatestBanner() {
       if (!latestBanner) return;
-      var list = loadCreatedTickets();
+      var list = visibleTickets();
       var latest = list.length ? list[0] : null;
       if (!latest || view !== "chat") {
         latestBanner.classList.remove("open");
@@ -1059,17 +1602,38 @@
       var ticket = findCreatedTicket(selectedTicketId);
       if (!ticket || ticket.status === "resolved") return;
       closingConfirm = false;
-      var closedMessage = {
-        id: "bot-closed-" + Date.now(),
-        role: "bot",
-        text: buildClosedMessage(ticket),
-        at: new Date().toISOString(),
-      };
-      updateCreatedTicket(selectedTicketId, {
-        status: "resolved",
-        messages: (ticket.messages || []).concat([closedMessage]),
-      });
-      setView("ticket-detail");
+      var ticketId = selectedTicketId;
+      var url = preferMagicRoutes
+        ? magicResolveUrl(config, ticketId, getOrCreateSessionId())
+        : chatWidgetResolveUrl(config, ticketId);
+      publicFetch(url, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }).then(function (res) {
+        return res.json().then(function (body) {
+          return { ok: res.ok, body: body };
+        }).catch(function () {
+          return { ok: res.ok, body: null };
+        });
+      }).then(function (result) {
+        if (!result.ok) return;
+        var closedMessage = {
+          id: "bot-closed-" + Date.now(),
+          role: "bot",
+          senderType: "system",
+          text: buildClosedMessage(ticket),
+          at: new Date().toISOString(),
+        };
+        upsertThreadMessage(ticketId, closedMessage);
+        updateCreatedTicket(ticketId, { status: "resolved" });
+        if (sessionTickets) {
+          sessionTickets = sessionTickets.map(function (item) {
+            if (!item || item.ticketId !== ticketId) return item;
+            return Object.assign({}, item, { status: "resolved", statusLabel: "Resolved" });
+          });
+        }
+        setView("ticket-detail");
+      }).catch(function () {});
     }
 
     function reopenTicket() {
@@ -1104,7 +1668,7 @@
     function openTicketForm(subjectText) {
       pendingSubject = String(subjectText || "").trim();
       loadVisitorIdentity();
-      skipIdentityFields = hasKnownIdentity();
+      skipIdentityFields = false;
       syncIdentityFieldsVisibility();
       if (descriptionInput) descriptionInput.value = pendingSubject;
       setFieldError("description", "");
@@ -1207,10 +1771,12 @@
         }
         syncResolveHeaderActions(detailTicket);
         renderTicketThread(selectedTicketId);
+        loadMessages(selectedTicketId);
+        markConversationRead(selectedTicketId);
       } else {
         syncResolveHeaderActions(null);
         if (isTicket) {
-          if (titleEl) titleEl.textContent = pendingSubject || "Raise a request";
+          if (titleEl) titleEl.textContent = "How can we help you?";
           if (taglineEl) taglineEl.textContent = "New request";
           loadVisitorIdentity();
           syncIdentityFieldsVisibility();
@@ -1222,12 +1788,13 @@
             descriptionInput.value = pendingSubject;
           }
           refreshTicketFormFromConfig();
-        } else if (isTicketsList) {
-          selectedTicketId = null;
-          if (titleEl) titleEl.textContent = widgetTitle;
-          if (taglineEl) taglineEl.textContent = widgetTagline;
-          renderTicketsList();
-        } else {
+      } else if (isTicketsList) {
+        selectedTicketId = null;
+        if (titleEl) titleEl.textContent = widgetTitle;
+        if (taglineEl) taglineEl.textContent = widgetTagline;
+        renderTicketsList();
+        refreshSessionConversations();
+      } else {
           selectedTicketId = null;
           if (titleEl) titleEl.textContent = widgetTitle;
           if (taglineEl) taglineEl.textContent = widgetTagline;
@@ -1322,6 +1889,11 @@
           if (view === "chat" && taglineEl) taglineEl.textContent = live.tagline;
         }
         if (live.welcome) config.welcome = live.welcome;
+        if (live.color) config.color = live.color;
+        if (live.logoUrl) {
+          config.logoUrl = live.logoUrl;
+          applyLogo(live.logoUrl);
+        }
         var details = live.ticketDetails || [];
         askFields = details.filter(isAskCustomerField);
         presetFields = details.filter(function (field) { return field.source === "preset" && field.fieldRef; });
@@ -1353,6 +1925,7 @@
     }
 
     restoreChatFromStorage();
+    refreshSessionConversations();
     if (askFields && askFields.length) {
       renderAskFields(askFields);
     } else if (BAKED.shared) {
@@ -1392,7 +1965,7 @@
     }
     if (latestLink) {
       latestLink.addEventListener("click", function () {
-        var list = loadCreatedTickets();
+        var list = visibleTickets();
         if (!list.length) return;
         openTicketChat(list[0].ticketId);
       });
@@ -1427,6 +2000,110 @@
       });
     }
 
+    function applyLogo(url) {
+      var logo = String(url || config.logoUrl || "").trim();
+      if (!avatar || !logo) return;
+      avatar.textContent = "";
+      avatar.innerHTML = '<img alt="" src="' + escapeHtmlLive(logo) + '" />';
+    }
+    applyLogo(config.logoUrl);
+
+    function stripMagicQueryParams() {
+      try {
+        var url = new URL(window.location.href);
+        var keys = ["sessionId", "chatWidgetId", "ticketId", "chatbot"];
+        var changed = false;
+        for (var i = 0; i < keys.length; i++) {
+          if (url.searchParams.has(keys[i])) {
+            url.searchParams.delete(keys[i]);
+            changed = true;
+          }
+        }
+        if (changed) {
+          window.history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
+        }
+      } catch (e) {}
+    }
+
+    function applyMagicLink() {
+      var params = readUrlQuery();
+      var sessionId = queryFirstValue(params, ["sessionId"]);
+      var widgetId = queryFirstValue(params, ["chatWidgetId"]);
+      var ticketId = queryFirstValue(params, ["ticketId"]);
+      var shouldOpen =
+        queryFlagTrue(params, ["chatbot"]) || Boolean(sessionId && ticketId);
+      if (widgetId && config.chatWidgetId && widgetId !== config.chatWidgetId) return;
+      if (!sessionId && !ticketId && !shouldOpen) return;
+      if (sessionId) {
+        rememberSessionId(sessionId);
+        preferMagicRoutes = true;
+      }
+      if (shouldOpen) setOpen(true);
+      if (ticketId) {
+        openTicketChat(ticketId);
+        publicFetch(magicConversationsUrl(config, ticketId, getOrCreateSessionId()), {
+          method: "GET",
+        }).then(function (res) {
+          return res.json().then(function (body) {
+            return { ok: res.ok, body: body };
+          }).catch(function () {
+            return { ok: false, body: null };
+          });
+        }).then(function (result) {
+          if (!result.ok) return;
+          var data = envelopeData(result.body) || {};
+          var brand = String(data.brandColor || data.BrandColor || "").trim();
+          var headerText = String(data.headerText || data.HeaderText || "").trim();
+          var widgetName = String(data.widgetName || data.WidgetName || data.name || data.Name || "").trim();
+          if (brand) {
+            config.color = brand;
+            var header = document.getElementById("desk-cw-header");
+            if (header) header.style.background = brand;
+            if (root) root.style.setProperty("--desk-cw-accent", brand);
+          }
+          if (widgetName) widgetTitle = widgetName;
+          if (headerText) widgetTagline = headerText;
+          if (data.logoUrl || data.LogoUrl) applyLogo(data.logoUrl || data.LogoUrl);
+          var subject = String(data.subject || data.Subject || "").trim();
+          var number = String(data.ticketNumber || data.TicketNumber || data.number || data.Number || "").trim();
+          var statusRaw = data.status || data.Status || "Open";
+          rememberCreatedTicket({
+            ticketId: ticketId,
+            ticketNumber: number,
+            subject: subject,
+            createdAt: data.updatedAt || data.UpdatedAt || "",
+            status: isResolvedStatus(statusRaw) ? "resolved" : "open",
+            messages: [],
+          });
+          if (selectedTicketId === ticketId) setView("ticket-detail");
+        }).catch(function () {});
+      }
+      stripMagicQueryParams();
+      ensureRealtime();
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener("change", function () {
+        pendingFiles = fileInput.files ? Array.prototype.slice.call(fileInput.files) : [];
+        renderPendingFiles();
+      });
+    }
+    window.addEventListener("focus", function () {
+      if (open && view === "ticket-detail" && selectedTicketId) {
+        markConversationRead(selectedTicketId);
+      }
+    });
+    window.__deskCwStopRealtime = function () {
+      hubStopped = true;
+      if (hubSocket) {
+        try { hubSocket.close(); } catch (e) {}
+        hubSocket = null;
+      }
+    };
+
+    applyMagicLink();
+    ensureRealtime();
+
     // Deep-link after UI is wired: ?chatbotopen=true&time=…
     applyDeepLinkActions(config, setOpen);
 
@@ -1437,13 +2114,17 @@
       if (composerMode === "ticket-reply") {
         var ticket = findCreatedTicket(selectedTicketId);
         if (!ticket || ticket.status === "resolved") return;
-        appendTicketMessage(selectedTicketId, {
+        var replyText = text;
+        input.value = "";
+        upsertThreadMessage(selectedTicketId, {
+          id: "pending-" + Date.now(),
           role: "user",
-          text: text,
+          senderType: "customer",
+          text: replyText,
           at: new Date().toISOString(),
         });
-        input.value = "";
         renderTicketThread(selectedTicketId);
+        postVisitorMessage(selectedTicketId, replyText);
         return;
       }
       input.value = "";
@@ -2029,12 +2710,10 @@
       }
       var hasError = false;
 
-      if (!skipIdentityFields) {
-        var nameError = validateName(nameInput.value);
-        if (nameError) { setFieldError("name", nameError); hasError = true; }
-        var emailError = validateEmail(emailInput.value);
-        if (emailError) { setFieldError("email", emailError); hasError = true; }
-      }
+      var nameError = validateName(nameInput.value);
+      if (nameError) { setFieldError("name", nameError); hasError = true; }
+      var emailError = validateEmail(emailInput.value);
+      if (emailError) { setFieldError("email", emailError); hasError = true; }
 
       var formDescription = String(
         descriptionInput && descriptionInput.value != null
@@ -2042,7 +2721,7 @@
           : "",
       ).trim();
       if (!formDescription) {
-        setFieldError("description", "Description is required");
+        setFieldError("description", "Tell us how we can help");
         hasError = true;
       }
 
@@ -2067,7 +2746,7 @@
       var formDetails = [
         { label: "Name", value: submittedName },
         { label: "Email", value: submittedEmail },
-        { label: "Description", value: formDescription },
+        { label: "How can we help you?", value: formDescription },
       ];
       for (var di = 0; di < askFields.length; di++) {
         var askField = askFields[di];
@@ -2088,8 +2767,7 @@
           value: embedValue,
         });
       }
-      var formSubject = String(pendingSubject || "").trim() || "Support request";
-      if (!formDescription) formDescription = formSubject;
+      var initialMessage = formDescription || String(pendingSubject || "").trim() || "Support request";
 
       if (!config.apiBaseUrl || !config.chatWidgetId) {
         if (statusEl) {
@@ -2103,23 +2781,16 @@
       submitBtn.disabled = true;
       submitBtn.textContent = "Submitting…";
 
-      var ticketHeaders = {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      };
-      if (config.orgId) ticketHeaders["X-Organisation-Id"] = config.orgId;
-      if (config.departmentId) ticketHeaders.DepartmentId = config.departmentId;
-
-      fetch(chatWidgetTicketsUrl(config), {
+      publicFetch(chatWidgetConversationsUrl(config), {
         method: "POST",
-        headers: ticketHeaders,
         body: JSON.stringify({
           requesterName: submittedName,
           requesterEmail: submittedEmail,
           requesterPhone: null,
-          subject: formSubject,
-          description: formDescription,
+          websiteUrl: String(window.location.href || ""),
+          initialMessage: initialMessage,
           answers: answers,
+          sessionId: getOrCreateSessionId(),
         }),
       }).then(function (res) {
         return res.json().then(function (body) {
@@ -2143,48 +2814,47 @@
         var payload = result.body && (result.body.Data != null ? result.body.Data : result.body.data != null ? result.body.data : result.body);
         var createdId = "local-" + Date.now();
         var createdTicketNumber = "";
-        var createdSubject = formSubject;
+        var createdSubject = initialMessage;
         var createdAt = new Date().toISOString();
         if (payload && typeof payload === "object") {
           createdId = String(
-            payload.TicketId || payload.ticketId || payload.Id || payload.id || createdId,
+            payload.ticketId || payload.TicketId || payload.id || payload.Id || createdId,
           );
           createdTicketNumber = String(
-            payload.TicketNumber || payload.ticketNumber || "",
+            payload.ticketNumber || payload.TicketNumber || "",
           ).trim();
           createdSubject = String(
-            payload.Subject || payload.subject || formSubject,
-          ).trim() || formSubject;
-          createdAt = payload.CreatedAt || payload.createdAt || createdAt;
+            payload.subject || payload.Subject || initialMessage,
+          ).trim() || initialMessage;
+          createdAt = payload.createdAt || payload.CreatedAt || createdAt;
+          if (payload.sessionId || payload.SessionId) {
+            rememberSessionId(payload.sessionId || payload.SessionId);
+          }
         }
-        var thanksText = buildTicketThanksText({
-          name: submittedName,
-          email: submittedEmail,
-          ticketNumber: createdTicketNumber,
-        });
-        var threadNow = new Date().toISOString();
+        var confirmationMessage = payload && typeof payload === "object"
+          ? String(
+              payload.confirmationMessage ||
+                payload.ConfirmationMessage ||
+                "",
+            ).trim()
+          : "";
+        if (!confirmationMessage) {
+          confirmationMessage = buildTicketThanksText({
+            name: submittedName,
+            email: submittedEmail,
+            ticketNumber: createdTicketNumber,
+          });
+        }
+        confirmationByTicket[createdId] = confirmationMessage;
         rememberCreatedTicket({
           ticketId: createdId,
           ticketNumber: createdTicketNumber,
           subject: createdSubject,
-          description: formDescription,
+          description: initialMessage,
           createdAt: createdAt,
           status: "open",
           details: formDetails,
-          messages: [
-            {
-              id: "user-" + Date.now(),
-              role: "user",
-              text: formSubject,
-              at: threadNow,
-            },
-            {
-              id: "bot-thanks-" + Date.now(),
-              role: "bot",
-              text: thanksText,
-              at: threadNow,
-            },
-          ],
+          messages: [],
         });
         pendingSubject = "";
         skipIdentityFields = false;
@@ -2192,6 +2862,10 @@
         resetMainChat();
         selectedTicketId = createdId;
         setView("ticket-detail");
+        loadMessages(createdId);
+        refreshSessionConversations();
+        ensureRealtime();
+        invokeRefreshTickets();
       }).catch(function () {
         if (statusEl) {
           statusEl.style.display = "block";
@@ -2228,6 +2902,7 @@
           if (live.position === "bottom-left" || live.position === "bottom-right") {
             cfg.position = live.position;
           }
+          if (live.logoUrl) cfg.logoUrl = live.logoUrl;
           cfg.captureFields = live.ticketDetails || [];
           cfg.askFields = (live.ticketDetails || []).filter(isAskCustomerField);
         }
@@ -2243,7 +2918,8 @@
   window.DeskChatWidget = {
     mount: mount,
     applyDeepLinkActions: applyDeepLinkActions,
-    destroy: function () {
+      destroy: function () {
+      if (typeof window.__deskCwStopRealtime === "function") window.__deskCwStopRealtime();
       var root = document.getElementById("desk-cw-root");
       var style = document.getElementById("desk-cw-style");
       if (root) root.remove();
