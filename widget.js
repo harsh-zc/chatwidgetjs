@@ -233,10 +233,14 @@
       var fileName = String(
         file.fileName || file.FileName || file.name || file.Name || file.filename || file.originalFileName || file.OriginalFileName || "Attachment",
       );
+      var inlineFlag = file.isInline != null ? file.isInline : file.IsInline;
+      var contentId = String(file.contentId || file.ContentId || "");
       var isInline =
-        file.isInline === true ||
-        file.IsInline === true ||
-        /^inline-[0-9a-f-]{8,}$/i.test(fileName);
+        inlineFlag === true ||
+        String(inlineFlag).toLowerCase() === "true" ||
+        String(inlineFlag) === "1" ||
+        /^inline-/i.test(fileName) ||
+        /^inline-/i.test(contentId);
       return {
         id: String(file.attachmentId || file.AttachmentId || file.id || file.Id || ""),
         fileName: fileName,
@@ -626,13 +630,13 @@
       "#desk-cw-avatar img{width:28px;height:28px;border-radius:999px;object-fit:cover;display:block}" +
       "#desk-cw-attach{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
       "#desk-cw-file{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0}" +
-      "#desk-cw-attach.is-disabled{opacity:.4;pointer-events:none}" +
+      "#desk-cw-attach.is-disabled,#desk-cw-attach.is-full{opacity:.4;pointer-events:none}" +
       "#desk-cw-files{display:none;padding:8px 12px 0}" +
       "#desk-cw-files.open{display:flex}" +
-      "#desk-cw-file-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:999px;padding:3px 4px 3px 10px;font-size:12px;line-height:1.3}" +
-      "#desk-cw-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}" +
-      "#desk-cw-file-x{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}" +
-      "#desk-cw-file-x:hover{background:#e2e8f0;color:#0f172a}" +
+      ".desk-cw-file-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:#f8fafc;color:#334155;border:1px solid #e2e8f0;border-radius:999px;padding:4px 4px 4px 10px;font-size:12px;line-height:1.3}" +
+      ".desk-cw-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}" +
+      ".desk-cw-file-x{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}" +
+      ".desk-cw-file-x:hover{background:#e2e8f0;color:#0f172a}" +
       "#desk-cw-confirm{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.4}" +
       "#desk-cw-load-earlier{display:block;margin:0 auto 8px;border:0;background:transparent;color:#64748b;font-size:12px;cursor:pointer;text-decoration:underline}";
     document.head.appendChild(style);
@@ -1195,6 +1199,7 @@
       if (!pendingFiles.length) {
         filesEl.classList.remove("open");
         filesEl.innerHTML = "";
+        if (attachLabel) attachLabel.classList.remove("is-full");
         return;
       }
       var file = pendingFiles[0];
@@ -1213,6 +1218,7 @@
           renderPendingFiles();
         });
       }
+      if (attachLabel) attachLabel.classList.add("is-full");
     }
 
     function postVisitorMessage(ticketId, bodyText) {
@@ -1505,6 +1511,27 @@
       return value.charAt(0) === "/" ? base + value : base + "/" + value;
     }
 
+    function saveDownloadedBlob(blob, name) {
+      var objectUrl = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+    }
+
+    function fetchAttachmentBlob(href, withSession) {
+      var request = withSession
+        ? publicFetch(href, { method: "GET", headers: { Accept: "*/*" } })
+        : fetch(href, { method: "GET", credentials: "omit" });
+      return request.then(function (res) {
+        if (!res || !res.ok) throw new Error("download");
+        return res.blob();
+      });
+    }
+
     function downloadAttachment(url, fileName) {
       var href = resolveAttachmentUrl(url);
       var name = String(fileName || "attachment").trim() || "attachment";
@@ -1512,32 +1539,13 @@
       var origin = deskOriginFromApiBase(config.apiBaseUrl);
       var apiBase = String(config.apiBaseUrl || "");
       var onApi = (origin && href.indexOf(origin) === 0) || (apiBase && href.indexOf(apiBase) === 0);
-      var request = onApi
-        ? publicFetch(href, { method: "GET", headers: { Accept: "*/*" } })
-        : fetch(href, { method: "GET", credentials: "omit" });
-      request.then(function (res) {
-        if (!res || !res.ok) throw new Error("download");
-        return res.blob();
-      }).then(function (blob) {
-        if (!blob) return;
-        var objectUrl = URL.createObjectURL(blob);
-        var link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = name;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+      fetchAttachmentBlob(href, onApi).then(function (blob) {
+        saveDownloadedBlob(blob, name);
       }).catch(function () {
-        var link = document.createElement("a");
-        link.href = href;
-        link.download = name;
-        link.target = "_blank";
-        link.rel = "noopener";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      });
+        return fetchAttachmentBlob(href, !onApi).then(function (blob) {
+          saveDownloadedBlob(blob, name);
+        });
+      }).catch(function () {});
     }
 
     function renderTicketThread(ticketId) {
@@ -1585,10 +1593,11 @@
           var visibleFiles = [];
           for (var v = 0; v < attachments.length; v++) {
             var candidate = attachments[v] || {};
-            if (candidate.isInline) continue;
+            var candidateName = String(candidate.fileName || candidate.name || "");
+            if (candidate.isInline || /^inline-/i.test(candidateName)) continue;
             visibleFiles.push(candidate);
           }
-          if (!visibleFiles.length) visibleFiles = attachments.slice(0, 1);
+          if (visibleFiles.length) {
           attachmentHtml = '<div class="desk-cw-thread-files">';
           for (var a = 0; a < visibleFiles.length; a++) {
             var file = visibleFiles[a] || {};
@@ -1604,6 +1613,7 @@
               "</button>";
           }
           attachmentHtml += "</div>";
+          }
         }
         html +=
           '<div class="desk-cw-thread-msg ' +
@@ -2223,7 +2233,7 @@
       attachLabel.addEventListener("click", function (event) {
         if (event.target === fileInput) return;
         event.preventDefault();
-        if (attachLabel.classList.contains("is-disabled")) return;
+        if (attachLabel.classList.contains("is-disabled") || attachLabel.classList.contains("is-full")) return;
         fileInput.click();
       });
     }
