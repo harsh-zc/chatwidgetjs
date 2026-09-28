@@ -172,6 +172,16 @@
     return config.apiBaseUrl + "/chat-widgets/" + encodeURIComponent(config.chatWidgetId) + "/session/conversations";
   }
 
+  function chatWidgetSessionUrl(config, sessionId) {
+    return (
+      config.apiBaseUrl +
+      "/chat-widgets/" +
+      encodeURIComponent(config.chatWidgetId) +
+      "/session?sessionId=" +
+      encodeURIComponent(sessionId || "")
+    );
+  }
+
   function chatWidgetMessagesUrl(config, ticketId) {
     return chatWidgetConversationsUrl(config) + "/" + encodeURIComponent(ticketId) + "/messages";
   }
@@ -427,12 +437,9 @@
     if (el) el.value = "";
     if (!wrap) return;
     var face = wrap.querySelector(".desk-cw-dd-face");
-    var kind = wrap.querySelector(".desk-cw-dd") && wrap.querySelector(".desk-cw-dd").getAttribute("data-dd-kind");
     if (face) {
       face.classList.add("is-placeholder");
-      if (kind === "datetime") face.textContent = "Select date & time";
-      else if (kind === "date") face.textContent = "Select date";
-      else face.textContent = "Select...";
+      face.textContent = "";
     }
     var checks = wrap.querySelectorAll(".desk-cw-dd-check");
     for (var i = 0; i < checks.length; i++) checks[i].classList.remove("is-checked");
@@ -538,13 +545,6 @@
       "#desk-cw-header-copy{min-width:0;flex:1}",
       "#desk-cw-title{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}",
       "#desk-cw-tagline{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:rgb(255 255 255 / .8)}",
-      "#desk-cw-latest-banner{display:none;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0;background:#f8fafc;padding:8px 12px}",
-      "#desk-cw-latest-banner.open{display:flex}",
-      "#desk-cw-latest-link{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:0;background:transparent;padding:0;text-align:left;cursor:pointer;font:inherit;font-size:12px;color:#475569}",
-      "#desk-cw-latest-link:hover{color:#0f172a}",
-      "#desk-cw-latest-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-      "#desk-cw-latest-new{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;color:" + color + "}",
-      "#desk-cw-latest-new:hover{background:#f8fafc}",
       "#desk-cw-chat,#desk-cw-ticket,#desk-cw-tickets-list,#desk-cw-thread{min-height:0;flex:1;overflow-y:auto}",
       "#desk-cw-chat{background:#f8fafc;padding:10px;display:flex;flex-direction:column;gap:8px}",
       "#desk-cw-ticket,#desk-cw-tickets-list,#desk-cw-thread{display:none;background:#fff;padding:12px}",
@@ -552,7 +552,7 @@
       "#desk-cw-thread.open{display:flex;flex-direction:column;gap:12px;background:#fff;padding:12px}",
       "#desk-cw-chat.hidden,#desk-cw-form-wrap.hidden{display:none}",
       ".desk-cw-row{display:flex}.desk-cw-row.user{justify-content:flex-end}.desk-cw-row.bot{justify-content:flex-start}",
-      ".desk-cw-bubble{max-width:80%;border-radius:14px;padding:7px 10px;font-size:13px;line-height:1.35;margin:0;word-break:break-word}",
+      ".desk-cw-bubble{max-width:80%;border-radius:14px;padding:7px 10px;font-size:13px;line-height:1.35;margin:0;word-break:break-word;white-space:pre-wrap}",
       ".desk-cw-bubble.bot{border-bottom-left-radius:6px;background:#fff;color:#1e293b;box-shadow:0 1px 2px rgb(15 23 42 / .06)}",
       ".desk-cw-bubble.user{border-bottom-right-radius:6px;background:" + color + ";color:#fff}",
       ".desk-cw-thread-day{display:flex;align-items:center;gap:8px;padding:4px 0}",
@@ -565,7 +565,7 @@
       ".desk-cw-thread-bubble{border-radius:14px;padding:8px 12px;font-size:13px;line-height:1.35;margin:0;word-break:break-word}",
       ".desk-cw-thread-msg.bot .desk-cw-thread-bubble{border-bottom-left-radius:6px;border:1px solid #e2e8f0;background:#fff;color:#1e293b}",
       ".desk-cw-thread-msg.user .desk-cw-thread-bubble{border-bottom-right-radius:6px;background:" + color + ";color:#fff}",
-      ".desk-cw-thread-bubble-text{margin:0}",
+      ".desk-cw-thread-bubble-text{margin:0;white-space:pre-wrap}",
       ".desk-cw-thread-time{margin:6px 0 0;font-size:10px;line-height:1;text-align:right}",
       ".desk-cw-thread-files{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}",
       ".desk-cw-attach-chip{display:inline-flex;align-items:center;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #e2e8f0;background:#f8fafc;color:#334155;border-radius:999px;padding:3px 8px;font-size:11px;line-height:1.3;cursor:pointer}",
@@ -597,18 +597,18 @@
       ".desk-cw-field>span{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:#475569}",
       ".desk-cw-field .req{display:inline;color:#f43f5e}",
       /* Match preview ChatWidget field chrome exactly */
-      ".desk-cw-field input,.desk-cw-field select,.desk-cw-field textarea{width:100%;box-sizing:border-box;height:40px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-family:inherit;font-size:14px;line-height:1.4;outline:none;background:#fff;color:#1e293b;box-shadow:0 1px 2px rgb(15 23 42 / .05);transition:border-color .15s ease,box-shadow .15s ease;cursor:pointer;-webkit-appearance:none;appearance:none}",
-      ".desk-cw-field textarea{height:auto;min-height:84px;padding:10px 12px;cursor:text;resize:none;vertical-align:top;field-sizing:fixed}",
+      ".desk-cw-field input,.desk-cw-field select{width:100%;box-sizing:border-box;height:40px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-family:inherit;font-size:14px;line-height:1.4;outline:none;background:#fff;color:#1e293b;box-shadow:0 1px 2px rgb(15 23 42 / .05);transition:border-color .15s ease,box-shadow .15s ease;cursor:pointer;-webkit-appearance:none;appearance:none}",
+      ".desk-cw-field textarea{width:100%;box-sizing:border-box;display:block;height:auto;min-height:84px;max-height:180px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;font-family:inherit;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;outline:none;background:#fff;color:#1e293b;box-shadow:0 1px 2px rgb(15 23 42 / .05);transition:border-color .15s ease,box-shadow .15s ease;cursor:text;resize:vertical;vertical-align:top;field-sizing:content}",
       ".desk-cw-field input[type=text],.desk-cw-field input[type=email],.desk-cw-field input[type=tel],.desk-cw-field input[type=url],.desk-cw-field input[type=number]{cursor:text}",
       ".desk-cw-field input::placeholder,.desk-cw-field textarea::placeholder{color:#94a3b8;opacity:1}",
       ".desk-cw-field input:focus,.desk-cw-field input:focus-visible,.desk-cw-field select:focus,.desk-cw-field select:focus-visible,.desk-cw-field textarea:focus,.desk-cw-field textarea:focus-visible,.desk-cw-dd-trigger:focus,.desk-cw-dd-trigger:focus-visible,.desk-cw-dd.is-open .desk-cw-dd-trigger{border-color:#94a3b8;box-shadow:0 1px 2px rgb(15 23 42 / .05)}",
       ".desk-cw-field.invalid input,.desk-cw-field.invalid select,.desk-cw-field.invalid textarea,.desk-cw-field.invalid .desk-cw-dd-trigger{border-color:#fb7185;box-shadow:0 1px 2px rgb(15 23 42 / .05)}",
       ".desk-cw-error{display:none;margin:6px 0 0;font-size:12px;color:#e11d48}",
       ".desk-cw-field.invalid .desk-cw-error{display:block}",
-      ".desk-cw-dd{position:relative}.desk-cw-dd-trigger{display:flex;width:100%;box-sizing:border-box;align-items:center;justify-content:space-between;gap:8px;height:40px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;background:#fff;color:#1e293b;font-size:14px;line-height:1.4;cursor:pointer;box-shadow:0 1px 2px rgb(15 23 42 / .05);text-align:left;outline:none;transition:border-color .15s ease,box-shadow .15s ease}.desk-cw-dd-face{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.desk-cw-dd-face.is-placeholder{color:#94a3b8}.desk-cw-dd-chevron{color:#94a3b8;flex-shrink:0;font-size:12px}.desk-cw-date-icon{color:#94a3b8;flex-shrink:0}.desk-cw-field.invalid .desk-cw-dd-trigger{border-color:#fb7185}.desk-cw-dd-menu{position:fixed;z-index:2147483646;box-sizing:border-box;max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 12px 24px rgb(15 23 42 / .16);padding:4px}.desk-cw-dd-item,.desk-cw-dd-check{display:flex;width:100%;box-sizing:border-box;align-items:center;gap:8px;border:0;background:transparent;border-radius:8px;padding:8px 12px;font-size:14px;color:#334155;cursor:pointer;text-align:left}.desk-cw-dd-item:hover,.desk-cw-dd-check:hover{background:#f1f5f9}.desk-cw-dd-item.is-active{color:#fff;background:var(--desk-cw-accent)}.desk-cw-dd-box{display:inline-flex;width:16px;height:16px;flex-shrink:0;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:10px;color:#fff}.desk-cw-dd-check.is-checked .desk-cw-dd-box{border-color:transparent;background:var(--desk-cw-accent)}.desk-cw-dd-check.is-checked .desk-cw-dd-box:after{content:\"✓\"}.desk-cw-empty{margin:0;padding:8px 12px;font-size:12px;color:#94a3b8}.desk-cw-date-menu{width:280px;max-height:none;overflow:hidden;padding:12px}.desk-cw-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.desk-cw-cal-title{margin:0;font-size:14px;font-weight:600;color:#1e293b}.desk-cw-cal-nav{display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#64748b;cursor:pointer}.desk-cw-cal-nav:hover{background:#f1f5f9}.desk-cw-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0}.desk-cw-cal-dow{padding:6px 0;text-align:center;font-size:11px;font-weight:500;color:#94a3b8}.desk-cw-cal-day{display:inline-flex;width:32px;height:32px;margin:0 auto;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#334155;font-size:13px;cursor:pointer}.desk-cw-cal-day:hover{background:#f1f5f9}.desk-cw-cal-day.is-active{color:#fff;background:var(--desk-cw-accent);font-weight:600}.desk-cw-cal-day.is-today:not(.is-active){box-shadow:inset 0 0 0 1px #cbd5e1}.desk-cw-time-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:8px 10px;border-radius:16px;background:#f8fafc}.desk-cw-time-label{font-size:12px;font-weight:500;color:#64748b}.desk-cw-time-controls{display:flex;align-items:center;gap:4px}.desk-cw-time-group{display:flex;align-items:center;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.desk-cw-time-btn{display:inline-flex;width:28px;height:32px;align-items:center;justify-content:center;border:0;background:transparent;color:#64748b;cursor:pointer}.desk-cw-time-btn:hover{background:#f8fafc}.desk-cw-time-val{width:28px;text-align:center;font-size:13px;font-weight:600;color:#1e293b}.desk-cw-cal-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px}.desk-cw-cal-link{border:0;background:transparent;padding:6px 8px;border-radius:8px;font-size:12px;font-weight:500;color:#64748b;cursor:pointer}.desk-cw-cal-link:hover{background:#f1f5f9;color:#1e293b}.desk-cw-cal-done{border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:var(--desk-cw-accent);cursor:pointer}.desk-cw-tags{position:relative}.desk-cw-tags-box{display:flex;width:100%;box-sizing:border-box;min-height:40px;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid #e2e8f0;border-radius:12px;padding:6px 8px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05);cursor:text}.desk-cw-field.invalid .desk-cw-tags-box{border-color:#fb7185}.desk-cw-tags-box.is-focus{border-color:#94a3b8}.desk-cw-tags-chips{display:contents}.desk-cw-tag-chip{display:inline-flex;max-width:100%;align-items:center;gap:4px;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:500;color:#fff;background:var(--desk-cw-accent)}.desk-cw-tag-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.desk-cw-tag-x{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgb(255 255 255 / .2);color:#fff;font-size:11px;line-height:1;cursor:pointer;padding:0}.desk-cw-tags-input{min-width:7rem;flex:1;border:0;outline:none;background:transparent;font-family:inherit;font-size:14px;line-height:1.4;color:#1e293b;padding:2px 4px}.desk-cw-tags-input::placeholder{color:#94a3b8}.desk-cw-tags-menu{position:fixed;z-index:2147483646;box-sizing:border-box;max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 12px 24px rgb(15 23 42 / .16);padding:4px}.desk-cw-tags-item{display:flex;width:100%;box-sizing:border-box;border:0;background:transparent;border-radius:8px;padding:8px 12px;font-size:14px;color:#334155;cursor:pointer;text-align:left}.desk-cw-tags-item:hover{background:#f1f5f9}.desk-cw-tags-item.is-hidden{display:none}.desk-cw-radio{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05)}.desk-cw-field.invalid .desk-cw-radio{border-color:#fb7185}.desk-cw-radio-option{position:relative;display:flex;align-items:center;gap:10px;font-size:14px;color:#334155;cursor:pointer}.desk-cw-radio-option input{position:absolute;opacity:0;width:1px;height:1px;margin:0;overflow:hidden;clip:rect(0,0,0,0)}.desk-cw-radio-dot{display:inline-flex;width:16px;height:16px;flex-shrink:0;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:999px;background:#fff}.desk-cw-radio-option input:checked + .desk-cw-radio-dot{border-color:transparent;background:var(--desk-cw-accent);box-shadow:inset 0 0 0 3px #fff}.desk-cw-radio .desk-cw-empty{margin:0;padding:0;font-size:12px;color:#94a3b8}.desk-cw-field textarea{min-height:84px;resize:none}",
+      ".desk-cw-dd{position:relative}.desk-cw-dd-trigger{display:flex;width:100%;box-sizing:border-box;align-items:center;justify-content:space-between;gap:8px;height:40px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;background:#fff;color:#1e293b;font-size:14px;line-height:1.4;cursor:pointer;box-shadow:0 1px 2px rgb(15 23 42 / .05);text-align:left;outline:none;transition:border-color .15s ease,box-shadow .15s ease}.desk-cw-dd-face{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.desk-cw-dd-face.is-placeholder{color:#94a3b8}.desk-cw-dd-chevron{color:#94a3b8;flex-shrink:0;font-size:12px}.desk-cw-date-icon{color:#94a3b8;flex-shrink:0}.desk-cw-field.invalid .desk-cw-dd-trigger{border-color:#fb7185}.desk-cw-dd-menu{position:fixed;z-index:2147483646;box-sizing:border-box;max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 12px 24px rgb(15 23 42 / .16);padding:4px}.desk-cw-dd-item,.desk-cw-dd-check{display:flex;width:100%;box-sizing:border-box;align-items:center;gap:8px;border:0;background:transparent;border-radius:8px;padding:8px 12px;font-size:14px;color:#334155;cursor:pointer;text-align:left}.desk-cw-dd-item:hover,.desk-cw-dd-check:hover{background:#f1f5f9}.desk-cw-dd-item.is-active{color:#fff;background:var(--desk-cw-accent)}.desk-cw-dd-box{display:inline-flex;width:16px;height:16px;flex-shrink:0;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:10px;color:#fff}.desk-cw-dd-check.is-checked .desk-cw-dd-box{border-color:transparent;background:var(--desk-cw-accent)}.desk-cw-dd-check.is-checked .desk-cw-dd-box:after{content:\"✓\"}.desk-cw-empty{margin:0;padding:8px 12px;font-size:12px;color:#94a3b8}.desk-cw-date-menu{width:280px;max-height:none;overflow:hidden;padding:12px}.desk-cw-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.desk-cw-cal-title{margin:0;font-size:14px;font-weight:600;color:#1e293b}.desk-cw-cal-nav{display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#64748b;cursor:pointer}.desk-cw-cal-nav:hover{background:#f1f5f9}.desk-cw-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0}.desk-cw-cal-dow{padding:6px 0;text-align:center;font-size:11px;font-weight:500;color:#94a3b8}.desk-cw-cal-day{display:inline-flex;width:32px;height:32px;margin:0 auto;align-items:center;justify-content:center;border:0;border-radius:999px;background:transparent;color:#334155;font-size:13px;cursor:pointer}.desk-cw-cal-day:hover{background:#f1f5f9}.desk-cw-cal-day.is-active{color:#fff;background:var(--desk-cw-accent);font-weight:600}.desk-cw-cal-day.is-today:not(.is-active){box-shadow:inset 0 0 0 1px #cbd5e1}.desk-cw-time-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:8px 10px;border-radius:16px;background:#f8fafc}.desk-cw-time-label{font-size:12px;font-weight:500;color:#64748b}.desk-cw-time-controls{display:flex;align-items:center;gap:4px}.desk-cw-time-group{display:flex;align-items:center;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.desk-cw-time-btn{display:inline-flex;width:28px;height:32px;align-items:center;justify-content:center;border:0;background:transparent;color:#64748b;cursor:pointer}.desk-cw-time-btn:hover{background:#f8fafc}.desk-cw-time-val{width:28px;text-align:center;font-size:13px;font-weight:600;color:#1e293b}.desk-cw-cal-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px}.desk-cw-cal-link{border:0;background:transparent;padding:6px 8px;border-radius:8px;font-size:12px;font-weight:500;color:#64748b;cursor:pointer}.desk-cw-cal-link:hover{background:#f1f5f9;color:#1e293b}.desk-cw-cal-done{border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:var(--desk-cw-accent);cursor:pointer}.desk-cw-tags{position:relative}.desk-cw-tags-box{display:flex;width:100%;box-sizing:border-box;min-height:40px;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid #e2e8f0;border-radius:12px;padding:6px 8px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05);cursor:text}.desk-cw-field.invalid .desk-cw-tags-box{border-color:#fb7185}.desk-cw-tags-box.is-focus{border-color:#94a3b8}.desk-cw-tags-chips{display:contents}.desk-cw-tag-chip{display:inline-flex;max-width:100%;align-items:center;gap:4px;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:500;color:#fff;background:var(--desk-cw-accent)}.desk-cw-tag-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.desk-cw-tag-x{display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center;border:0;border-radius:999px;background:rgb(255 255 255 / .2);color:#fff;font-size:11px;line-height:1;cursor:pointer;padding:0}.desk-cw-tags-input{min-width:7rem;flex:1;border:0;outline:none;background:transparent;font-family:inherit;font-size:14px;line-height:1.4;color:#1e293b;padding:2px 4px}.desk-cw-tags-input::placeholder{color:#94a3b8}.desk-cw-tags-menu{position:fixed;z-index:2147483646;box-sizing:border-box;max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 12px 24px rgb(15 23 42 / .16);padding:4px}.desk-cw-tags-item{display:flex;width:100%;box-sizing:border-box;border:0;background:transparent;border-radius:8px;padding:8px 12px;font-size:14px;color:#334155;cursor:pointer;text-align:left}.desk-cw-tags-item:hover{background:#f1f5f9}.desk-cw-tags-item.is-hidden{display:none}.desk-cw-radio{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fff;box-shadow:0 1px 2px rgb(15 23 42 / .05)}.desk-cw-field.invalid .desk-cw-radio{border-color:#fb7185}.desk-cw-radio-option{position:relative;display:flex;align-items:center;gap:10px;font-size:14px;color:#334155;cursor:pointer}.desk-cw-radio-option input{position:absolute;opacity:0;width:1px;height:1px;margin:0;overflow:hidden;clip:rect(0,0,0,0)}.desk-cw-radio-dot{display:inline-flex;width:16px;height:16px;flex-shrink:0;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:999px;background:#fff}.desk-cw-radio-option input:checked + .desk-cw-radio-dot{border-color:transparent;background:var(--desk-cw-accent);box-shadow:inset 0 0 0 3px #fff}.desk-cw-radio .desk-cw-empty{margin:0;padding:0;font-size:12px;color:#94a3b8}.desk-cw-field textarea{min-height:84px;max-height:180px;white-space:pre-wrap;overflow-wrap:anywhere;field-sizing:content}",
       "#desk-cw-submit{width:100%;margin-top:8px;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600;color:#fff;background:" + color + ";box-shadow:0 4px 10px " + color + "40}",
       "#desk-cw-submit:hover{filter:brightness(1.05)}",
-      "#desk-cw-back,#desk-cw-send,#desk-cw-launcher,#desk-cw-tickets-btn,#desk-cw-tickets-new,#desk-cw-latest-new,#desk-cw-latest-link,#desk-cw-resolve,#desk-cw-resolve-cancel,#desk-cw-resolve-close,#desk-cw-reopen,#desk-cw-new-chat{cursor:pointer}",
+      "#desk-cw-back,#desk-cw-send,#desk-cw-launcher,#desk-cw-tickets-btn,#desk-cw-tickets-new,#desk-cw-resolve,#desk-cw-resolve-cancel,#desk-cw-resolve-close,#desk-cw-reopen,#desk-cw-new-chat{cursor:pointer}",
       "#desk-cw-form-wrap{display:flex;align-items:center;gap:8px;border-top:1px solid #e2e8f0;background:#fff;padding:8px}",
       "#desk-cw-input{min-width:0;flex:1;height:36px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-family:inherit;font-size:14px;line-height:1.4;outline:none;cursor:text;box-shadow:0 1px 2px rgb(15 23 42 / .05);background:#fff;color:#1e293b}",
       "#desk-cw-input:focus,#desk-cw-input:focus-visible{border-color:#94a3b8;box-shadow:0 1px 2px rgb(15 23 42 / .05)}",
@@ -638,7 +638,7 @@
       ".desk-cw-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}" +
       ".desk-cw-file-x{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:0;border-radius:999px;background:#fff;color:" + config.color + ";cursor:pointer;font-size:14px;line-height:1;padding:0}" +
       ".desk-cw-file-x:hover{background:" + config.color + ";color:#fff}" +
-      "#desk-cw-confirm{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.4}" +
+      "#desk-cw-confirm{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;color:#334155;font-size:12px;line-height:1.4;white-space:pre-wrap}" +
       "#desk-cw-load-earlier{display:block;margin:0 auto 8px;border:0;background:transparent;color:#64748b;font-size:12px;cursor:pointer;text-decoration:underline}";
     document.head.appendChild(style);
 
@@ -690,10 +690,6 @@
       "</div>" +
       '<button type="button" id="desk-cw-tickets-btn" aria-label="My requests" title="My requests">' + TICKETS_ICON + "</button>" +
       "</header>" +
-      '<div id="desk-cw-latest-banner">' +
-      '<button type="button" id="desk-cw-latest-link"><span id="desk-cw-latest-text"></span></button>' +
-      '<button type="button" id="desk-cw-latest-new">' + PLUS_ICON + "New</button>" +
-      "</div>" +
       '<div id="desk-cw-chat"></div>' +
       '<div id="desk-cw-tickets-list">' +
       '<div class="desk-cw-tickets-toolbar">' +
@@ -703,9 +699,9 @@
       '<div id="desk-cw-tickets-items"></div>' +
       "</div>" +
       '<div id="desk-cw-ticket">' +
-      '<label class="desk-cw-field" id="desk-cw-name-field" data-error-for="name"><span>Name <span class="req">*</span></span><input id="desk-cw-name" type="text" name="name" autocomplete="name" placeholder="e.g. Aditi Sharma" /><p class="desk-cw-error" data-error-msg="name" hidden></p></label>' +
-      '<label class="desk-cw-field" id="desk-cw-email-field" data-error-for="email"><span>Email <span class="req">*</span></span><input id="desk-cw-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" /><p class="desk-cw-error" data-error-msg="email" hidden></p></label>' +
-      '<label class="desk-cw-field" id="desk-cw-description-field" data-error-for="description"><span>How can we help you? <span class="req">*</span></span><textarea id="desk-cw-description" rows="3" placeholder="Tell us what you need"></textarea><p class="desk-cw-error" data-error-msg="description" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-name-field" data-error-for="name"><span>Name <span class="req">*</span></span><input id="desk-cw-name" type="text" name="name" autocomplete="name" /><p class="desk-cw-error" data-error-msg="name" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-email-field" data-error-for="email"><span>Email <span class="req">*</span></span><input id="desk-cw-email" type="email" name="email" autocomplete="email" /><p class="desk-cw-error" data-error-msg="email" hidden></p></label>' +
+      '<label class="desk-cw-field" id="desk-cw-description-field" data-error-for="description"><span>How can we help you? <span class="req">*</span></span><textarea id="desk-cw-description" rows="3"></textarea><p class="desk-cw-error" data-error-msg="description" hidden></p></label>' +
       '<div id="desk-cw-ask-fields">' + "" + '</div>' +
       '<p id="desk-cw-submit-status" class="desk-cw-error" hidden style="display:none;margin:0 0 8px"></p>' +
       '<button type="button" id="desk-cw-submit">Submit request</button>' +
@@ -749,10 +745,6 @@
     var ticketsListEl = document.getElementById("desk-cw-tickets-list");
     var ticketsItemsEl = document.getElementById("desk-cw-tickets-items");
     var formWrap = document.getElementById("desk-cw-form-wrap");
-    var latestBanner = document.getElementById("desk-cw-latest-banner");
-    var latestLink = document.getElementById("desk-cw-latest-link");
-    var latestText = document.getElementById("desk-cw-latest-text");
-    var latestNewBtn = document.getElementById("desk-cw-latest-new");
     var nameField = document.getElementById("desk-cw-name-field");
     var emailField = document.getElementById("desk-cw-email-field");
     var input = document.getElementById("desk-cw-input");
@@ -776,6 +768,7 @@
     var sessionTickets = null;
     var remoteThreads = {};
     var threadPaging = {};
+    var threadLoading = {};
     var confirmationByTicket = {};
     var readWatermark = {};
     var preferMagicRoutes = false;
@@ -949,7 +942,6 @@
           if (!Array.isArray(data)) return;
           sessionTickets = data.map(mapSessionConversation).filter(Boolean);
           if (view === "tickets") renderTicketsList();
-          updateLatestBanner();
           syncOpenTicketChrome();
         })
         .catch(function () {});
@@ -989,6 +981,9 @@
     function loadMessages(ticketId, paginationToken) {
       var id = String(ticketId || "").trim();
       if (!id || !config.apiBaseUrl) return Promise.resolve();
+      if (threadLoading[id]) return Promise.resolve();
+      threadLoading[id] = true;
+      var beforeCount = threadMessages(id).length;
       return publicFetch(messagesRequestUrl(id, paginationToken), { method: "GET" })
         .then(function (res) {
           return res.json().then(function (body) {
@@ -1003,8 +998,8 @@
           var rows = Array.isArray(data) ? data : (data && (data.messages || data.Messages || data.items || data.Items)) || [];
           if (!Array.isArray(rows)) rows = [];
           var mapped = rows.map(mapPublicMessage).filter(Boolean);
-          if (paginationToken) {
-            var existing = threadMessages(id);
+          var existing = threadMessages(id);
+          if (paginationToken || existing.length) {
             for (var i = 0; i < existing.length; i++) mapped.push(existing[i]);
           }
           var seen = {};
@@ -1020,13 +1015,25 @@
           });
           remoteThreads[id] = next;
           var token = result.body && (result.body.paginationToken || result.body.PaginationToken);
-          threadPaging[id] = token ? String(token) : "";
+          token = token ? String(token) : "";
+          if (paginationToken) {
+            if (!rows.length || next.length <= beforeCount || token === String(paginationToken)) {
+              threadPaging[id] = "";
+            } else {
+              threadPaging[id] = token;
+            }
+          } else if (!threadPaging[id]) {
+            threadPaging[id] = token;
+          }
           if (selectedTicketId === id && view === "ticket-detail") {
-            renderTicketThread(id);
+            renderTicketThread(id, paginationToken ? "preserve" : "bottom");
             markConversationRead(id);
           }
         })
-        .catch(function () {});
+        .catch(function () {})
+        .then(function () {
+          threadLoading[id] = false;
+        });
     }
 
     function markConversationRead(ticketId) {
@@ -1058,10 +1065,9 @@
         var message = mapPublicMessage(payload.message || payload.Message || {});
         if (message) upsertThreadMessage(ticketId, message);
         if (selectedTicketId === ticketId && view === "ticket-detail") {
-          renderTicketThread(ticketId);
+          renderTicketThread(ticketId, "auto");
           markConversationRead(ticketId);
         }
-        refreshSessionConversations();
         return;
       }
       if (type === "ticket.status.changed" && ticketId) {
@@ -1493,8 +1499,12 @@
       }).catch(function () {});
     }
 
-    function renderTicketThread(ticketId) {
+    function renderTicketThread(ticketId, scrollMode) {
       if (!threadEl) return;
+      var mode = scrollMode || "bottom";
+      var prevTop = threadEl.scrollTop;
+      var prevHeight = threadEl.scrollHeight;
+      var nearBottom = prevHeight - prevTop - threadEl.clientHeight < 80;
       var ticket = findCreatedTicket(ticketId);
       var messages = threadMessages(ticketId);
       if (!messages.length && ticket && Array.isArray(ticket.messages) && ticket.messages.length) {
@@ -1521,7 +1531,7 @@
         html += '<button type="button" id="desk-cw-load-earlier">Load earlier</button>';
       }
       if (confirm && !hasSystemAck) {
-        html += '<p id="desk-cw-confirm">' + escapeHtmlLive(confirm) + "</p>";
+        html += '<p id="desk-cw-confirm">' + escapeHtmlLive(normalizeLineBreaks(confirm)) + "</p>";
       }
       if (messages.length) {
         html +=
@@ -1558,7 +1568,7 @@
           '<div class="desk-cw-thread-body">' +
           '<div class="desk-cw-thread-bubble">' +
           (msg.text
-            ? '<p class="desk-cw-thread-bubble-text">' + escapeHtmlLive(String(msg.text || "")) + "</p>"
+            ? '<p class="desk-cw-thread-bubble-text">' + escapeHtmlLive(normalizeLineBreaks(String(msg.text || ""))) + "</p>"
             : "") +
           '<p class="desk-cw-thread-time">' +
           escapeHtmlLive(formatMessageTime(msg.at)) +
@@ -1580,28 +1590,17 @@
           loadMessages(ticketId, threadPaging[ticketId]);
         });
       }
-      requestAnimationFrame(function () {
+      if (mode === "preserve") {
+        threadEl.scrollTop = prevTop + (threadEl.scrollHeight - prevHeight);
+      } else if (mode === "keep" || (mode === "auto" && !nearBottom)) {
+        threadEl.scrollTop = prevTop;
+      } else {
         requestAnimationFrame(function () {
-          threadEl.scrollTop = threadEl.scrollHeight;
+          requestAnimationFrame(function () {
+            threadEl.scrollTop = threadEl.scrollHeight;
+          });
         });
-      });
-    }
-
-    function updateLatestBanner() {
-      if (!latestBanner) return;
-      var list = visibleTickets();
-      var latest = list.length ? list[0] : null;
-      if (!latest || view !== "chat") {
-        latestBanner.classList.remove("open");
-        return;
       }
-      var numberLabel = formatTicketNumber(latest.ticketNumber);
-      var subject = latest.subject || "Support request";
-      if (latestText) {
-        latestText.textContent =
-          (numberLabel ? numberLabel + " · " : "") + subject;
-      }
-      latestBanner.classList.add("open");
     }
 
     function resetMainChat() {
@@ -1748,12 +1747,19 @@
       });
     }
 
+    function normalizeLineBreaks(value) {
+      var text = String(value == null ? "" : value);
+      text = text.split("\r\n").join("\n");
+      text = text.split("\\n").join("\n");
+      return text;
+    }
+
     function addBubble(role, text) {
       var row = document.createElement("div");
       row.className = "desk-cw-row " + role;
       var bubble = document.createElement("p");
       bubble.className = "desk-cw-bubble " + role;
-      bubble.textContent = text;
+      bubble.textContent = normalizeLineBreaks(text);
       row.appendChild(bubble);
       chatEl.appendChild(row);
       scrollChatToBottom();
@@ -1889,7 +1895,6 @@
         }
       }
       syncComposerForView();
-      updateLatestBanner();
     }
 
     function escapeHtmlLive(value) {
@@ -1907,26 +1912,26 @@
       var req = field.required ? ' <span class="req">*</span>' : "";
       var options = field.options || [];
       if (kind === "textarea") {
-        return '<label class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><textarea data-ask-id="' + id + '" rows="3" placeholder="Enter value"></textarea><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></label>';
+        return '<label class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><textarea data-ask-id="' + id + '" rows="3"></textarea><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></label>';
       }
       if (kind === "select") {
-        var items = '<button type="button" class="desk-cw-dd-item" data-dd-option="" data-dd-label="Select...">Select...</button>';
+        var items = "";
         for (var i = 0; i < options.length; i++) {
           items += '<button type="button" class="desk-cw-dd-item" data-dd-option="' + escapeHtmlLive(options[i].value) + '" data-dd-label="' + escapeHtmlLive(options[i].label) + '">' + escapeHtmlLive(options[i].label) + '</button>';
         }
-        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-dd" data-dd-kind="select"><button type="button" class="desk-cw-dd-trigger" data-dd-trigger><span class="desk-cw-dd-face is-placeholder">Select...</span><span class="desk-cw-dd-chevron">▾</span></button><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-dd-menu" data-dd-menu hidden>' + items + '</div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
+        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-dd" data-dd-kind="select"><button type="button" class="desk-cw-dd-trigger" data-dd-trigger><span class="desk-cw-dd-face is-placeholder"></span><span class="desk-cw-dd-chevron">▾</span></button><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-dd-menu" data-dd-menu hidden>' + items + '</div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
       }
       if (kind === "multiselect") {
         var multiItems = options.length === 0 ? '<p class="desk-cw-empty">No options configured</p>' : options.map(function (option) {
           return '<button type="button" class="desk-cw-dd-check" data-dd-check="' + escapeHtmlLive(option.value) + '" data-dd-label="' + escapeHtmlLive(option.label) + '"><span class="desk-cw-dd-box" aria-hidden="true"></span><span>' + escapeHtmlLive(option.label) + '</span></button>';
         }).join("");
-        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-dd" data-dd-kind="multi"><button type="button" class="desk-cw-dd-trigger" data-dd-trigger><span class="desk-cw-dd-face is-placeholder">Select...</span><span class="desk-cw-dd-chevron">▾</span></button><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-dd-menu" data-dd-menu hidden>' + multiItems + '</div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
+        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-dd" data-dd-kind="multi"><button type="button" class="desk-cw-dd-trigger" data-dd-trigger><span class="desk-cw-dd-face is-placeholder"></span><span class="desk-cw-dd-chevron">▾</span></button><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-dd-menu" data-dd-menu hidden>' + multiItems + '</div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
       }
       if (kind === "textselect") {
         var tagItems = options.map(function (option) {
           return '<button type="button" class="desk-cw-tags-item" data-tags-option="' + escapeHtmlLive(option.value) + '" data-tags-label="' + escapeHtmlLive(option.label) + '">' + escapeHtmlLive(option.label) + '</button>';
         }).join("");
-        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-tags" data-tags-root><div class="desk-cw-tags-box" data-tags-box><div class="desk-cw-tags-chips" data-tags-chips></div><input type="text" class="desk-cw-tags-input" data-tags-input placeholder="Add…" autocomplete="off" /></div><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-tags-menu" data-tags-menu hidden>' + tagItems + '</div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
+        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-tags" data-tags-root><div class="desk-cw-tags-box" data-tags-box><div class="desk-cw-tags-chips" data-tags-chips></div><input type="text" class="desk-cw-tags-input" data-tags-input autocomplete="off" /></div><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-tags-menu" data-tags-menu hidden>' + tagItems + '</div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
       }
       if (kind === "radio") {
         var radioOpts = options.length ? options : (String(field.fieldType || "") === "Boolean" ? [{ value: "true", label: "Yes" }, { value: "false", label: "No" }] : []);
@@ -1936,11 +1941,10 @@
         return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-radio" data-radio-root role="radiogroup"><input type="hidden" data-ask-id="' + id + '" value="" />' + radioItems + '</div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
       }
       if (kind === "date" || kind === "datetime") {
-        var placeholder = kind === "datetime" ? "Select date & time" : "Select date";
-        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-dd" data-dd-kind="' + kind + '"><button type="button" class="desk-cw-dd-trigger" data-dd-trigger><span class="desk-cw-dd-face is-placeholder">' + placeholder + '</span><svg class="desk-cw-date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-dd-menu desk-cw-date-menu" data-dd-menu hidden></div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
+        return '<div class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><div class="desk-cw-dd" data-dd-kind="' + kind + '"><button type="button" class="desk-cw-dd-trigger" data-dd-trigger><span class="desk-cw-dd-face is-placeholder"></span><svg class="desk-cw-date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button><input type="hidden" data-ask-id="' + id + '" value="" /><div class="desk-cw-dd-menu desk-cw-date-menu" data-dd-menu hidden></div></div><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></div>';
       }
       var typeAttr = kind === "number" ? "number" : kind === "email" ? "email" : kind === "phone" ? "tel" : kind === "url" ? "url" : "text";
-      return '<label class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><input data-ask-id="' + id + '" type="' + typeAttr + '" placeholder="Enter value" /><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></label>';
+      return '<label class="desk-cw-field" data-error-for="' + id + '"><span>' + label + req + '</span><input data-ask-id="' + id + '" type="' + typeAttr + '" /><p class="desk-cw-error" data-error-msg="' + id + '" hidden></p></label>';
     }
 
     function renderAskFields(fields) {
@@ -2018,7 +2022,6 @@
     function restoreChatFromStorage() {
       chatEl.innerHTML = "";
       addBubble("bot", config.welcome, { skipPersist: true });
-      updateLatestBanner();
     }
 
     restoreChatFromStorage();
@@ -2027,6 +2030,15 @@
       renderAskFields(askFields);
     }
 
+    if (threadEl) {
+      threadEl.addEventListener("scroll", function () {
+        if (view !== "ticket-detail" || !selectedTicketId) return;
+        if (threadEl.scrollTop > 48) return;
+        var token = threadPaging[selectedTicketId];
+        if (!token || threadLoading[selectedTicketId]) return;
+        loadMessages(selectedTicketId, token);
+      });
+    }
     launcher.addEventListener("click", function () { setOpen(!open); });
     backBtn.addEventListener("click", function () {
       if (view === "ticket-detail") {
@@ -2051,18 +2063,6 @@
     if (ticketsNewBtn) {
       ticketsNewBtn.addEventListener("click", function () {
         openNewRequestForm();
-      });
-    }
-    if (latestNewBtn) {
-      latestNewBtn.addEventListener("click", function () {
-        openNewRequestForm();
-      });
-    }
-    if (latestLink) {
-      latestLink.addEventListener("click", function () {
-        var list = visibleTickets();
-        if (!list.length) return;
-        openTicketChat(list[0].ticketId);
       });
     }
     if (resolveBtn) {
@@ -2120,6 +2120,56 @@
       } catch (e) {}
     }
 
+    function applySessionProfile(data) {
+      if (!data || typeof data !== "object") return;
+      if (data.sessionId || data.SessionId) {
+        rememberSessionId(data.sessionId || data.SessionId);
+      }
+      var name = String(
+        data.requesterName ||
+          data.RequesterName ||
+          data.customerName ||
+          data.CustomerName ||
+          data.name ||
+          data.Name ||
+          "",
+      ).trim();
+      var email = String(
+        data.requesterEmail ||
+          data.RequesterEmail ||
+          data.customerEmail ||
+          data.CustomerEmail ||
+          data.email ||
+          data.Email ||
+          "",
+      ).trim();
+      if (!name && !email) return;
+      if (name && nameInput) nameInput.value = name;
+      if (email && emailInput) emailInput.value = email;
+      saveVisitorIdentity(
+        name || (nameInput ? nameInput.value : ""),
+        email || (emailInput ? emailInput.value : ""),
+      );
+    }
+
+    function fetchSessionProfile(sessionId) {
+      var id = String(sessionId || "").trim();
+      if (!id || !config.apiBaseUrl || !config.chatWidgetId) return Promise.resolve();
+      return publicFetch(chatWidgetSessionUrl(config, id), { method: "GET" })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            return { ok: res.ok, body: body };
+          }).catch(function () {
+            return { ok: res.ok, body: null };
+          });
+        })
+        .then(function (result) {
+          if (!result.ok || !result.body) return;
+          applySessionProfile(envelopeData(result.body) || {});
+        })
+        .catch(function () {});
+    }
+
     function applyMagicLink() {
       var params = readUrlQuery();
       var sessionId = queryFirstValue(params, ["sessionId"]);
@@ -2132,6 +2182,7 @@
       if (sessionId) {
         rememberSessionId(sessionId);
         preferMagicRoutes = true;
+        fetchSessionProfile(sessionId);
       }
       if (shouldOpen) setOpen(true);
       if (ticketId) {
@@ -2271,7 +2322,7 @@
       var values = String(hidden.value || "").split(",").map(function (v) { return v.trim(); }).filter(Boolean);
       if (!values.length) {
         face.classList.add("is-placeholder");
-        face.textContent = "Select...";
+        face.textContent = "";
         return;
       }
       var labels = [];
@@ -2328,7 +2379,7 @@
 
     function formatDateFace(value, kind) {
       var raw = String(value || "").trim();
-      if (!raw) return kind === "datetime" ? "Select date & time" : "Select date";
+      if (!raw) return "";
       var datePart = raw;
       var hour = 0;
       var minute = 0;
@@ -2464,7 +2515,7 @@
           hidden.value = "";
           selectedDay = null;
           face.classList.add("is-placeholder");
-          face.textContent = kind === "datetime" ? "Select date & time" : "Select date";
+          face.textContent = "";
           hidden.dispatchEvent(new Event("change", { bubbles: true }));
           menu.hidden = true;
           root.classList.remove("is-open");
@@ -2523,7 +2574,7 @@
               items[j].addEventListener("click", function (event) {
                 var btn = event.currentTarget;
                 var value = btn.getAttribute("data-dd-option") || "";
-                var label = btn.getAttribute("data-dd-label") || "Select...";
+                var label = btn.getAttribute("data-dd-label") || "";
                 hidden.value = value;
                 for (var k = 0; k < items.length; k++) items[k].classList.remove("is-active");
                 if (value) btn.classList.add("is-active");
