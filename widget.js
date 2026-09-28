@@ -361,11 +361,8 @@
         title: name,
         welcome: String(data.greeting || data.Greeting || data.welcomeMessage || data.WelcomeMessage || "").trim(),
         tagline: headerText,
-        color: String(data.brandColor || data.BrandColor || data.primaryColor || data.PrimaryColor || data.color || data.Color || "").trim(),
         logoUrl: String(data.logoUrl || data.LogoUrl || "").trim(),
         ticketCreationMessage: String(data.ticketCreationMessage || data.TicketCreationMessage || "").trim(),
-        launcherIcon: String(data.launcherIcon || data.LauncherIcon || "").trim(),
-        position: String(data.position || data.Position || "").trim(),
         ticketDetails: normalizeTicketDetails(data.ticketDetails || data.TicketDetails || []),
         isEnabled: data.isEnabled != null ? Boolean(data.isEnabled) : data.IsEnabled != null ? Boolean(data.IsEnabled) : true,
       };
@@ -2150,15 +2147,8 @@
         }).then(function (result) {
           if (!result.ok) return;
           var data = envelopeData(result.body) || {};
-          var brand = String(data.brandColor || data.BrandColor || "").trim();
           var headerText = String(data.headerText || data.HeaderText || "").trim();
           var widgetName = String(data.widgetName || data.WidgetName || data.name || data.Name || "").trim();
-          if (brand) {
-            config.color = brand;
-            var header = document.getElementById("desk-cw-header");
-            if (header) header.style.background = brand;
-            if (root) root.style.setProperty("--desk-cw-accent", brand);
-          }
           if (widgetName) widgetTitle = widgetName;
           if (headerText) widgetTagline = headerText;
           if (data.logoUrl || data.LogoUrl) applyLogo(data.logoUrl || data.LogoUrl);
