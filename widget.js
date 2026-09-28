@@ -231,6 +231,15 @@
 
   function mapPublicMessage(item) {
     if (!item || typeof item !== "object") return null;
+    if (
+      !item.bodyText &&
+      !item.BodyText &&
+      !item.messageId &&
+      !item.MessageId &&
+      (item.message || item.Message)
+    ) {
+      return mapPublicMessage(item.message || item.Message);
+    }
     var sender = String(item.senderType || item.SenderType || "").trim();
     var senderKey = sender.toLowerCase();
     var role = senderKey === "customer" ? "user" : "bot";
@@ -609,8 +618,8 @@
       "#desk-cw-submit{width:100%;margin-top:8px;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600;color:#fff;background:" + color + ";box-shadow:0 4px 10px " + color + "40}",
       "#desk-cw-submit:hover{filter:brightness(1.05)}",
       "#desk-cw-back,#desk-cw-send,#desk-cw-launcher,#desk-cw-tickets-btn,#desk-cw-tickets-new,#desk-cw-resolve,#desk-cw-resolve-cancel,#desk-cw-resolve-close,#desk-cw-reopen,#desk-cw-new-chat{cursor:pointer}",
-      "#desk-cw-form-wrap{display:flex;align-items:center;gap:8px;border-top:1px solid #e2e8f0;background:#fff;padding:8px}",
-      "#desk-cw-input{min-width:0;flex:1;height:36px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-family:inherit;font-size:14px;line-height:1.4;outline:none;cursor:text;box-shadow:0 1px 2px rgb(15 23 42 / .05);background:#fff;color:#1e293b}",
+      "#desk-cw-form-wrap{display:flex;align-items:flex-end;gap:8px;border-top:1px solid #e2e8f0;background:#fff;padding:8px}",
+      "#desk-cw-input{min-width:0;flex:1;height:auto;min-height:36px;max-height:120px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:12px;padding:8px 12px;font-family:inherit;font-size:14px;line-height:1.4;white-space:pre-wrap;outline:none;cursor:text;resize:none;field-sizing:content;box-shadow:0 1px 2px rgb(15 23 42 / .05);background:#fff;color:#1e293b}",
       "#desk-cw-input:focus,#desk-cw-input:focus-visible{border-color:#94a3b8;box-shadow:0 1px 2px rgb(15 23 42 / .05)}",
       "#desk-cw-input:disabled{cursor:default;background:#f8fafc}",
       "#desk-cw-send{display:inline-flex;height:36px;width:36px;align-items:center;justify-content:center;border:0;border-radius:12px;background:" + color + ";color:#fff;cursor:pointer}",
@@ -710,7 +719,7 @@
       '<div id="desk-cw-files"></div>' +
       '<form id="desk-cw-form-wrap">' +
       '<label id="desk-cw-attach" aria-label="Attach a file">' + CLIP_ICON + '<input id="desk-cw-file" type="file" tabindex="-1" /></label>' +
-      '<input id="desk-cw-input" type="text" placeholder="Type a message..." autocomplete="off" />' +
+      '<textarea id="desk-cw-input" rows="1" placeholder="Type a message..." autocomplete="off"></textarea>' +
       '<button type="submit" id="desk-cw-send" aria-label="Send">' + SEND_ICON + "</button>" +
       "</form>" +
       '<div id="desk-cw-closed-actions">' +
@@ -952,15 +961,43 @@
       return Array.isArray(list) ? list : [];
     }
 
+    function isStandInMessageId(id) {
+      var value = String(id || "");
+      return value.indexOf("pending-") === 0 || value.indexOf("msg-") === 0;
+    }
+
+    function collapseDuplicateMessages(list) {
+      var realKeys = {};
+      for (var i = 0; i < list.length; i++) {
+        var item = list[i];
+        if (!item || isStandInMessageId(item.id)) continue;
+        realKeys[String(item.role || "") + "\n" + String(item.text || "").trim()] = true;
+      }
+      var seen = {};
+      var next = [];
+      for (var j = 0; j < list.length; j++) {
+        var row = list[j];
+        if (!row) continue;
+        var key = String(row.role || "") + "\n" + String(row.text || "").trim();
+        if (isStandInMessageId(row.id) && realKeys[key]) continue;
+        var id = String(row.id || "");
+        if (id && seen[id]) continue;
+        if (id) seen[id] = true;
+        next.push(row);
+      }
+      return next;
+    }
+
     function upsertThreadMessage(ticketId, message) {
       if (!ticketId || !message) return;
       var list = threadMessages(ticketId).slice();
       var idx = -1;
       for (var i = 0; i < list.length; i++) {
-        if (list[i] && list[i].id && list[i].id === message.id) idx = i;
+        if (list[i] && list[i].id && message.id && list[i].id === message.id) idx = i;
       }
       if (idx >= 0) list[idx] = message;
       else list.push(message);
+      list = collapseDuplicateMessages(list);
       list.sort(function (a, b) {
         return String(a.at || "").localeCompare(String(b.at || ""));
       });
@@ -1013,6 +1050,7 @@
           next.sort(function (a, b) {
             return String(a.at || "").localeCompare(String(b.at || ""));
           });
+          next = collapseDuplicateMessages(next);
           remoteThreads[id] = next;
           var token = result.body && (result.body.paginationToken || result.body.PaginationToken);
           token = token ? String(token) : "";
@@ -2253,6 +2291,14 @@
 
     // Deep-link after UI is wired: ?chatbotopen=true&time=…
     applyDeepLinkActions(config, setOpen);
+
+    if (input) {
+      input.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" || event.shiftKey) return;
+        event.preventDefault();
+        if (typeof formWrap.requestSubmit === "function") formWrap.requestSubmit();
+      });
+    }
 
     formWrap.addEventListener("submit", function (event) {
       event.preventDefault();
