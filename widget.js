@@ -1146,7 +1146,10 @@
       if (!sessionId) return;
       var origin = deskOriginFromApiBase(config.apiBaseUrl);
       var hubPath = origin + "/realtime/chat-widget";
-      var query = "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) + "&sessionId=" + encodeURIComponent(sessionId);
+      var query =
+        "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) +
+        "&sessionId=" + encodeURIComponent(sessionId) +
+        "&X-Desk-Chat-Session=" + encodeURIComponent(sessionId);
       var wsUrl = hubPath.replace(/^http/i, "ws") + "?" + query;
       var socket;
       try {
