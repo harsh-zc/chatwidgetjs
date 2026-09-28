@@ -1519,17 +1519,6 @@
       return value.charAt(0) === "/" ? base + value : base + "/" + value;
     }
 
-    function saveDownloadedBlob(blob, name) {
-      var objectUrl = URL.createObjectURL(blob);
-      var link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
-    }
-
     function fetchAttachmentBlob(href, withSession) {
       var request = withSession
         ? publicFetch(href, { method: "GET", headers: { Accept: "*/*" } })
@@ -1540,20 +1529,24 @@
       });
     }
 
-    function downloadAttachment(url, fileName) {
+    function openAttachment(url) {
       var href = resolveAttachmentUrl(url);
-      var name = String(fileName || "attachment").trim() || "attachment";
       if (!href) return;
+      var tab = window.open("about:blank", "_blank");
+      if (!tab) return;
       var origin = deskOriginFromApiBase(config.apiBaseUrl);
       var apiBase = String(config.apiBaseUrl || "");
       var onApi = (origin && href.indexOf(origin) === 0) || (apiBase && href.indexOf(apiBase) === 0);
-      fetchAttachmentBlob(href, onApi).then(function (blob) {
-        saveDownloadedBlob(blob, name);
+      function showBlob(blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        tab.location.href = objectUrl;
+        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 120000);
+      }
+      fetchAttachmentBlob(href, onApi).then(showBlob).catch(function () {
+        return fetchAttachmentBlob(href, !onApi).then(showBlob);
       }).catch(function () {
-        return fetchAttachmentBlob(href, !onApi).then(function (blob) {
-          saveDownloadedBlob(blob, name);
-        });
-      }).catch(function () {});
+        tab.location.href = href;
+      });
     }
 
     function renderTicketThread(ticketId, scrollMode) {
@@ -1638,7 +1631,7 @@
       for (var c = 0; c < chips.length; c++) {
         chips[c].addEventListener("click", function (event) {
           var chip = event.currentTarget;
-          downloadAttachment(chip.getAttribute("data-file-url") || "", chip.getAttribute("data-file-name") || "attachment");
+          openAttachment(chip.getAttribute("data-file-url") || "");
         });
       }
       var earlier = document.getElementById("desk-cw-load-earlier");
