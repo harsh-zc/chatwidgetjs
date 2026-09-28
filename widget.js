@@ -542,6 +542,9 @@
       "#desk-cw-panel.open{display:flex}",
       "#desk-cw-header{display:flex;align-items:center;gap:8px;padding:10px 12px;color:#fff;background:" + color + "}",
       "#desk-cw-avatar,#desk-cw-back,#desk-cw-tickets-btn{display:inline-flex;height:28px;width:28px;align-items:center;justify-content:center;border-radius:999px;background:rgb(255 255 255 / .2);font-size:12px;font-weight:600;border:0;color:#fff;cursor:pointer;flex-shrink:0}",
+      "#desk-cw-tickets-btn{position:relative;overflow:visible}",
+      "#desk-cw-ticket-count{display:none;position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;align-items:center;justify-content:center;border-radius:999px;background:#fff;color:" + color + ";font-size:10px;font-weight:700;line-height:1;pointer-events:none}",
+      "#desk-cw-ticket-count.on{display:inline-flex}",
       "#desk-cw-back{display:none}",
       "#desk-cw-resolve-actions{display:none;flex-shrink:0;align-items:center;gap:6px}",
       "#desk-cw-resolve,#desk-cw-resolve-cancel,#desk-cw-resolve-close{flex-shrink:0;cursor:pointer;border:0;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:600;color:#fff}",
@@ -697,7 +700,7 @@
       '<button type="button" id="desk-cw-resolve-cancel">Cancel</button>' +
       '<button type="button" id="desk-cw-resolve-close">Close</button>' +
       "</div>" +
-      '<button type="button" id="desk-cw-tickets-btn" aria-label="My requests" title="My requests">' + TICKETS_ICON + "</button>" +
+      '<button type="button" id="desk-cw-tickets-btn" aria-label="My requests" title="My requests">' + TICKETS_ICON + '<span id="desk-cw-ticket-count"></span></button>' +
       "</header>" +
       '<div id="desk-cw-chat"></div>' +
       '<div id="desk-cw-tickets-list">' +
@@ -926,6 +929,21 @@
       return sessionTickets || [];
     }
 
+    function syncTicketCount() {
+      var badge = document.getElementById("desk-cw-ticket-count");
+      if (!badge) return;
+      var count = visibleTickets().length;
+      if (!count) {
+        badge.textContent = "";
+        badge.className = "";
+        if (ticketsBtn) ticketsBtn.setAttribute("aria-label", "My requests");
+        return;
+      }
+      badge.textContent = count > 99 ? "99+" : String(count);
+      badge.className = "on";
+      if (ticketsBtn) ticketsBtn.setAttribute("aria-label", "My requests, " + count);
+    }
+
     function refreshSessionConversations() {
       if (!config.apiBaseUrl || !config.chatWidgetId) return Promise.resolve();
       var headers = {
@@ -950,6 +968,7 @@
           var data = result.body.data != null ? result.body.data : result.body.Data;
           if (!Array.isArray(data)) return;
           sessionTickets = data.map(mapSessionConversation).filter(Boolean);
+          syncTicketCount();
           if (view === "tickets") renderTicketsList();
           syncOpenTicketChrome();
         })
@@ -1010,7 +1029,7 @@
         ? magicMessagesUrl(config, ticketId, sessionId)
         : chatWidgetMessagesUrl(config, ticketId);
       var joiner = base.indexOf("?") >= 0 ? "&" : "?";
-      var url = base + joiner + "limit=50";
+      var url = base + joiner + "limit=10";
       if (paginationToken) url += "&paginationToken=" + encodeURIComponent(paginationToken);
       return url;
     }
@@ -2009,9 +2028,7 @@
         if (live.title) {
           widgetTitle = live.title;
           document.getElementById("desk-cw-title").textContent = live.title;
-          avatar.textContent =
-            (live.title.slice(0, 1) || "S").toUpperCase() +
-            (live.title.slice(1, 2) || "").toLowerCase();
+          paintHeaderAvatar(live.title);
         }
         if (live.tagline) {
           widgetTagline = live.tagline;
@@ -2026,9 +2043,9 @@
           }
         }
         if (live.logoUrl) {
-          config.logoUrl = live.logoUrl;
-          applyLogo(live.logoUrl);
+          applyStoredLauncherIcon(live.logoUrl);
         }
+        paintHeaderAvatar(widgetTitle);
         var details = live.ticketDetails || [];
         askFields = details.filter(isAskCustomerField);
         presetFields = details.filter(function (field) { return field.source === "preset" && field.fieldRef; });
@@ -2133,13 +2150,25 @@
       });
     }
 
-    function applyLogo(url) {
-      var logo = String(url || config.logoUrl || "").trim();
-      if (!avatar || !logo) return;
-      avatar.textContent = "";
-      avatar.innerHTML = '<img alt="" src="' + escapeHtmlLive(logo) + '" />';
+    function paintHeaderAvatar(label) {
+      if (!avatar) return;
+      var source = String(label || widgetTitle || config.title || "S");
+      avatar.textContent =
+        (source.slice(0, 1) || "S").toUpperCase() +
+        (source.slice(1, 2) || "").toLowerCase();
     }
-    applyLogo(config.logoUrl);
+
+    function applyStoredLauncherIcon(url) {
+      var logo = String(url || "").trim();
+      if (!logo || !LAUNCHER_ICONS[logo]) return;
+      CHAT_ICON = launcherSvg(logo);
+      config.launcherIcon = logo;
+      if (launcher && launcher.getAttribute("aria-expanded") !== "true") {
+        launcher.innerHTML = CHAT_ICON;
+      }
+    }
+    applyStoredLauncherIcon(config.logoUrl);
+    paintHeaderAvatar(config.title);
 
     function stripMagicQueryParams() {
       try {
@@ -2238,9 +2267,12 @@
           var data = envelopeData(result.body) || {};
           var headerText = String(data.headerText || data.HeaderText || "").trim();
           var widgetName = String(data.widgetName || data.WidgetName || data.name || data.Name || "").trim();
-          if (widgetName) widgetTitle = widgetName;
+          if (widgetName) {
+            widgetTitle = widgetName;
+            paintHeaderAvatar(widgetName);
+          }
           if (headerText) widgetTagline = headerText;
-          if (data.logoUrl || data.LogoUrl) applyLogo(data.logoUrl || data.LogoUrl);
+          if (data.logoUrl || data.LogoUrl) applyStoredLauncherIcon(data.logoUrl || data.LogoUrl);
           var subject = String(data.subject || data.Subject || "").trim();
           var number = String(data.ticketNumber || data.TicketNumber || data.number || data.Number || "").trim();
           var statusRaw = data.status || data.Status || "Open";
