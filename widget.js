@@ -1007,6 +1007,52 @@
       return next;
     }
 
+    function commitThreadMessages(ticketId, list) {
+      var next = collapseDuplicateMessages(list);
+      next.sort(function (a, b) {
+        return String(a.at || "").localeCompare(String(b.at || ""));
+      });
+      remoteThreads[ticketId] = next;
+    }
+
+    function dropLonePendingReply(ticketId, message) {
+      if (!message || message.role !== "user" || isStandInMessageId(message.id)) return;
+      var list = threadMessages(ticketId).slice();
+      var pendingIds = [];
+      var hasServer = false;
+      for (var i = 0; i < list.length; i++) {
+        var row = list[i];
+        if (!row) continue;
+        if (row.id === message.id) hasServer = true;
+        if (row.role === "user" && isStandInMessageId(row.id)) pendingIds.push(row.id);
+      }
+      if (!hasServer || pendingIds.length !== 1) return;
+      var kept = [];
+      for (var j = 0; j < list.length; j++) {
+        if (list[j] && list[j].id === pendingIds[0]) continue;
+        kept.push(list[j]);
+      }
+      commitThreadMessages(ticketId, kept);
+    }
+
+    function swapPendingMessage(ticketId, pendingId, serverMessage) {
+      var list = threadMessages(ticketId).slice();
+      var next = [];
+      var placed = false;
+      for (var i = 0; i < list.length; i++) {
+        var row = list[i];
+        if (!row || row.id === pendingId) continue;
+        if (serverMessage && row.id === serverMessage.id) {
+          next.push(serverMessage);
+          placed = true;
+          continue;
+        }
+        next.push(row);
+      }
+      if (serverMessage && !placed) next.push(serverMessage);
+      commitThreadMessages(ticketId, next);
+    }
+
     function upsertThreadMessage(ticketId, message) {
       if (!ticketId || !message) return;
       var list = threadMessages(ticketId).slice();
@@ -1016,11 +1062,8 @@
       }
       if (idx >= 0) list[idx] = message;
       else list.push(message);
-      list = collapseDuplicateMessages(list);
-      list.sort(function (a, b) {
-        return String(a.at || "").localeCompare(String(b.at || ""));
-      });
-      remoteThreads[ticketId] = list;
+      commitThreadMessages(ticketId, list);
+      dropLonePendingReply(ticketId, message);
     }
 
     function messagesRequestUrl(ticketId, paginationToken) {
@@ -1281,7 +1324,7 @@
       if (attachLabel) attachLabel.classList.add("is-full");
     }
 
-    function postVisitorMessage(ticketId, bodyText) {
+    function postVisitorMessage(ticketId, bodyText, pendingId) {
       var id = String(ticketId || "").trim();
       var text = String(bodyText || "").trim();
       var files = pendingFiles.slice();
@@ -1312,10 +1355,18 @@
         if (!result.ok) {
           pendingFiles = files;
           renderPendingFiles();
+          if (pendingId) swapPendingMessage(id, pendingId, null);
           return result;
         }
         var created = mapPublicMessage(envelopeData(result.body) || {});
-        if (created && created.text) upsertThreadMessage(id, created);
+        if (pendingId && created && created.id && !isStandInMessageId(created.id)) {
+          swapPendingMessage(id, pendingId, created);
+          if (selectedTicketId === id && view === "ticket-detail") {
+            renderTicketThread(id, "auto");
+          }
+        } else if (created && created.text) {
+          upsertThreadMessage(id, created);
+        }
         return loadMessages(id).then(function () { return result; });
       });
     }
@@ -2335,8 +2386,9 @@
         var replyText = text;
         var replyFiles = pendingFiles.slice();
         input.value = "";
+        var pendingId = "pending-" + Date.now();
         upsertThreadMessage(selectedTicketId, {
-          id: "pending-" + Date.now(),
+          id: pendingId,
           role: "user",
           senderType: "customer",
           text: replyText,
@@ -2346,7 +2398,7 @@
           }),
         });
         renderTicketThread(selectedTicketId);
-        postVisitorMessage(selectedTicketId, replyText);
+        postVisitorMessage(selectedTicketId, replyText, pendingId);
         return;
       }
       if (!text) return;
