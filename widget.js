@@ -184,6 +184,10 @@
     return chatWidgetConversationsUrl(config) + "/" + encodeURIComponent(ticketId) + "/resolve";
   }
 
+  function chatWidgetOpenUrl(config, ticketId) {
+    return chatWidgetConversationsUrl(config) + "/" + encodeURIComponent(ticketId) + "/open";
+  }
+
   function magicQuery(config, ticketId, sessionId) {
     return (
       "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) +
@@ -1752,14 +1756,28 @@
     function reopenTicket() {
       var ticket = findCreatedTicket(selectedTicketId);
       if (!ticket || ticket.status !== "resolved") return;
-      updateCreatedTicket(selectedTicketId, { status: "open" });
-      if (sessionTickets) {
-        sessionTickets = sessionTickets.map(function (item) {
-          if (!item || item.ticketId !== selectedTicketId) return item;
-          return Object.assign({}, item, { status: "open", statusLabel: "Open" });
+      var ticketId = selectedTicketId;
+      publicFetch(chatWidgetOpenUrl(config, ticketId), {
+        method: "POST",
+        body: JSON.stringify({}),
+      }).then(function (res) {
+        return res.json().then(function (body) {
+          return { ok: res.ok, body: body };
+        }).catch(function () {
+          return { ok: res.ok, body: null };
         });
-      }
-      setView("ticket-detail");
+      }).then(function (result) {
+        if (!result.ok) return;
+        updateCreatedTicket(ticketId, { status: "open" });
+        if (sessionTickets) {
+          sessionTickets = sessionTickets.map(function (item) {
+            if (!item || item.ticketId !== ticketId) return item;
+            return Object.assign({}, item, { status: "open", statusLabel: "Open" });
+          });
+        }
+        setView("ticket-detail");
+        refreshSessionConversations();
+      }).catch(function () {});
     }
 
     function syncResolveHeaderActions(ticket) {
