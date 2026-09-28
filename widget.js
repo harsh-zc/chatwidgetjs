@@ -553,7 +553,7 @@
       "#desk-cw-ticket,#desk-cw-tickets-list,#desk-cw-thread{display:none;background:#fff;padding:12px}",
       "#desk-cw-ticket.open,#desk-cw-tickets-list.open{display:block}",
       "#desk-cw-thread.open{display:flex;flex-direction:column;gap:12px;background:#fff;padding:12px}",
-      "#desk-cw-chat.hidden,#desk-cw-form-wrap.hidden,#desk-cw-powered.hidden{display:none}",
+      "#desk-cw-chat.hidden,#desk-cw-form-wrap.hidden{display:none}",
       ".desk-cw-row{display:flex}.desk-cw-row.user{justify-content:flex-end}.desk-cw-row.bot{justify-content:flex-start}",
       ".desk-cw-bubble{max-width:80%;border-radius:14px;padding:7px 10px;font-size:13px;line-height:1.35;margin:0;word-break:break-word}",
       ".desk-cw-bubble.bot{border-bottom-left-radius:6px;background:#fff;color:#1e293b;box-shadow:0 1px 2px rgb(15 23 42 / .06)}",
@@ -595,8 +595,7 @@
       "#desk-cw-reopen svg{flex-shrink:0}",
       "#desk-cw-new-chat{min-width:0;flex:1;cursor:pointer;border:0;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;color:#fff;background:" + color + "}",
       "#desk-cw-new-chat:hover{filter:brightness(1.05)}",
-      "#desk-cw-powered{display:none;margin:0;padding:0 8px 8px;text-align:center;font-size:10px;color:#94a3b8;background:#fff}",
-      "#desk-cw-powered.open{display:block}",
+      "#desk-cw-form-wrap{display:flex;align-items:center;gap:8px;border-top:1px solid #e2e8f0;background:#fff;padding:8px}",
       ".desk-cw-field{display:block;margin-bottom:14px}",
       ".desk-cw-field>span{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:#475569}",
       ".desk-cw-field .req{display:inline;color:#f43f5e}",
@@ -632,11 +631,12 @@
     style.id = "desk-cw-style";
     style.textContent = css(config.color, config.position === "bottom-left") +
       "#desk-cw-avatar img{width:28px;height:28px;border-radius:999px;object-fit:cover;display:block}" +
-      "#desk-cw-attach{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
+      "#desk-cw-attach{position:relative;display:none;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;color:#64748b;cursor:pointer}" +
+      "#desk-cw-attach.is-reply{display:inline-flex}" +
       "#desk-cw-file{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;opacity:0}" +
       "#desk-cw-attach.is-disabled,#desk-cw-attach.is-full{opacity:.4;pointer-events:none}" +
-      "#desk-cw-files{display:none;padding:8px 12px 0}" +
-      "#desk-cw-files.open{display:flex}" +
+      "#desk-cw-files{display:none;padding:10px 12px 12px}" +
+      "#desk-cw-files.open.is-reply{display:flex}" +
       ".desk-cw-file-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:" + config.color + "1f;color:#0f172a;border:1px solid " + config.color + ";border-radius:999px;padding:5px 6px 5px 12px;font-size:12px;font-weight:600;line-height:1.3}" +
       ".desk-cw-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}" +
       ".desk-cw-file-x{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border:0;border-radius:999px;background:#fff;color:" + config.color + ";cursor:pointer;font-size:14px;line-height:1;padding:0}" +
@@ -726,7 +726,6 @@
       '<button type="button" id="desk-cw-new-chat">Start a new chat</button>' +
       "</div>" +
       "</div>" +
-      '<p id="desk-cw-powered">Powered by Zeal Desk</p>' +
       "</div>" +
       '<button type="button" id="desk-cw-launcher" aria-label="Open chat" aria-expanded="false">' + CHAT_ICON + "</button>" +
       "</div>";
@@ -753,7 +752,6 @@
     var ticketsListEl = document.getElementById("desk-cw-tickets-list");
     var ticketsItemsEl = document.getElementById("desk-cw-tickets-items");
     var formWrap = document.getElementById("desk-cw-form-wrap");
-    var poweredEl = document.getElementById("desk-cw-powered");
     var latestBanner = document.getElementById("desk-cw-latest-banner");
     var latestLink = document.getElementById("desk-cw-latest-link");
     var latestText = document.getElementById("desk-cw-latest-text");
@@ -777,8 +775,6 @@
     var widgetTagline = config.tagline;
     var storagePrefix = "desk_cw_" + String(config.key || "default").trim();
     var identityKey = storagePrefix + "_identity";
-    var chatHistoryKey = storagePrefix + "_chat";
-    var ticketsKey = storagePrefix + "_tickets";
     var sessionKey = storagePrefix + "_session";
     var sessionTickets = null;
     var remoteThreads = {};
@@ -794,9 +790,6 @@
     var fileInput = document.getElementById("desk-cw-file");
     var attachLabel = document.getElementById("desk-cw-attach");
     var filesEl = document.getElementById("desk-cw-files");
-    var MAX_CHAT_MESSAGES = 50;
-    var MAX_STORED_TICKETS = 20;
-    var MAX_TICKET_MESSAGES = 100;
     var ticketsHeadingEl = document.getElementById("desk-cw-tickets-heading");
     var ticketsNewBtn = document.getElementById("desk-cw-tickets-new");
 
@@ -845,42 +838,10 @@
     document.getElementById("desk-cw-tagline").textContent = config.tagline;
     avatar.textContent = (config.title.slice(0, 1) || "S").toUpperCase() + (config.title.slice(1, 2) || "").toLowerCase();
 
-    function readJsonStorage(key, fallback) {
-      try {
-        var raw = window.localStorage.getItem(key);
-        if (!raw) return fallback;
-        var parsed = JSON.parse(raw);
-        return parsed == null ? fallback : parsed;
-      } catch (e) {
-        return fallback;
-      }
-    }
-
-    function writeJsonStorage(key, value) {
-      try {
-        window.localStorage.setItem(key, JSON.stringify(value));
-      } catch (e) {}
-    }
-
-    function loadChatHistory() {
-      var list = readJsonStorage(chatHistoryKey, []);
-      return Array.isArray(list) ? list : [];
-    }
-
-    function saveChatHistory(messages) {
-      var next = Array.isArray(messages) ? messages.slice(-MAX_CHAT_MESSAGES) : [];
-      writeJsonStorage(chatHistoryKey, next);
-    }
-
-    function appendChatHistory(role, text) {
-      var messages = loadChatHistory();
-      messages.push({
-        role: role,
-        text: String(text || ""),
-        at: new Date().toISOString(),
-      });
-      saveChatHistory(messages);
-    }
+    try {
+      window.localStorage.removeItem(storagePrefix + "_chat");
+      window.localStorage.removeItem(storagePrefix + "_tickets");
+    } catch (e) {}
 
     function rememberSessionId(id) {
       var next = String(id || "").trim();
@@ -963,7 +924,7 @@
     }
 
     function visibleTickets() {
-      return sessionTickets ? sessionTickets : loadCreatedTickets();
+      return sessionTickets || [];
     }
 
     function refreshSessionConversations() {
@@ -990,14 +951,6 @@
           var data = result.body.data != null ? result.body.data : result.body.Data;
           if (!Array.isArray(data)) return;
           sessionTickets = data.map(mapSessionConversation).filter(Boolean);
-          for (var s = 0; s < sessionTickets.length; s++) {
-            var remoteTicket = sessionTickets[s];
-            updateCreatedTicket(remoteTicket.ticketId, {
-              status: remoteTicket.status,
-              subject: remoteTicket.subject,
-              ticketNumber: remoteTicket.ticketNumber,
-            });
-          }
           if (view === "tickets") renderTicketsList();
           updateLatestBanner();
           syncOpenTicketChrome();
@@ -1197,8 +1150,7 @@
       if (typeof WebSocket === "undefined") return;
       var sessionId = getOrCreateSessionId();
       if (!sessionId) return;
-      var origin = deskOriginFromApiBase(config.apiBaseUrl);
-      var hubPath = origin + "/realtime/chat-widget";
+      var hubPath = String(config.apiBaseUrl || "").replace(/\/+$/, "") + "/realtime/chat-widget";
       var query =
         "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) +
         "&sessionId=" + encodeURIComponent(sessionId);
@@ -1308,88 +1260,48 @@
       });
     }
 
-    function loadCreatedTickets() {
-      var list = readJsonStorage(ticketsKey, []);
-      return Array.isArray(list) ? list : [];
-    }
-
     function rememberCreatedTicket(ticket) {
       if (!ticket || !ticket.ticketId) return;
-      var list = loadCreatedTickets().filter(function (item) {
-        return item && item.ticketId !== ticket.ticketId;
-      });
-      var details = Array.isArray(ticket.details)
-        ? ticket.details
-            .map(function (detail) {
-              if (!detail || typeof detail !== "object") return null;
-              var label = String(detail.label || "").trim();
-              var value = String(detail.value || "").trim();
-              if (!label || !value) return null;
-              return { label: label, value: value };
-            })
-            .filter(Boolean)
-        : [];
-      var messages = Array.isArray(ticket.messages)
-        ? ticket.messages
-            .map(function (msg, index) {
-              if (!msg || typeof msg !== "object") return null;
-              var role = msg.role === "user" ? "user" : msg.role === "bot" ? "bot" : null;
-              var text = String(msg.text || "").trim();
-              if (!role || !text) return null;
-              return {
-                id: String(msg.id || role + "-" + index),
-                role: role,
-                text: text,
-                at: typeof msg.at === "string" ? msg.at : new Date().toISOString(),
-              };
-            })
-            .filter(Boolean)
-            .slice(-MAX_TICKET_MESSAGES)
-        : [];
-      list.unshift({
-        ticketId: String(ticket.ticketId),
+      var id = String(ticket.ticketId);
+      var next = {
+        ticketId: id,
         ticketNumber: ticket.ticketNumber ? String(ticket.ticketNumber) : "",
         subject: ticket.subject ? String(ticket.subject) : "",
         description: ticket.description ? String(ticket.description) : "",
         createdAt: ticket.createdAt || new Date().toISOString(),
         status: ticket.status === "resolved" ? "resolved" : "open",
-        details: details,
-        messages: messages,
+        statusLabel: ticket.status === "resolved" ? "Resolved" : "Open",
+      };
+      var list = (sessionTickets || []).filter(function (item) {
+        return item && item.ticketId !== id;
       });
-      writeJsonStorage(ticketsKey, list.slice(0, MAX_STORED_TICKETS));
+      list.unshift(next);
+      sessionTickets = list;
     }
 
     function updateCreatedTicket(ticketId, patch) {
       var id = String(ticketId || "").trim();
-      if (!id) return loadCreatedTickets();
-      var list = loadCreatedTickets().map(function (ticket) {
+      if (!id || !sessionTickets) return sessionTickets || [];
+      sessionTickets = sessionTickets.map(function (ticket) {
         if (!ticket || String(ticket.ticketId) !== id) return ticket;
         var next = Object.assign({}, ticket, patch || {}, { ticketId: id });
-        if (patch && Object.prototype.hasOwnProperty.call(patch, "messages")) {
-          next.messages = Array.isArray(patch.messages)
-            ? patch.messages.slice(-MAX_TICKET_MESSAGES)
-            : [];
-        }
-        if (patch && patch.status !== "resolved" && patch.status !== "open") {
-          next.status = ticket.status === "resolved" ? "resolved" : "open";
-        }
+        if (patch && patch.status === "resolved") next.statusLabel = "Resolved";
+        else if (patch && patch.status === "open") next.statusLabel = "Open";
         return next;
       });
-      writeJsonStorage(ticketsKey, list);
-      return list;
+      return sessionTickets;
     }
 
     function appendTicketMessage(ticketId, message) {
       var ticket = findCreatedTicket(ticketId);
-      if (!ticket) return loadCreatedTickets();
-      var nextMessage = {
-        id: message.id || message.role + "-" + Date.now(),
-        role: message.role,
-        text: message.text,
-        at: message.at || new Date().toISOString(),
-      };
+      if (!ticket) return sessionTickets || [];
       return updateCreatedTicket(ticketId, {
-        messages: (ticket.messages || []).concat([nextMessage]),
+        messages: (ticket.messages || []).concat([{
+          id: message.id || message.role + "-" + Date.now(),
+          role: message.role,
+          text: message.text,
+          at: message.at || new Date().toISOString(),
+        }]),
       });
     }
 
@@ -1470,26 +1382,14 @@
     function findCreatedTicket(ticketId) {
       var id = String(ticketId || "").trim();
       if (!id) return null;
-      var local = null;
-      var list = loadCreatedTickets();
-      for (var i = 0; i < list.length; i++) {
-        if (list[i] && String(list[i].ticketId) === id) local = list[i];
-      }
-      var remoteHit = null;
       var remote = sessionTickets || [];
       for (var j = 0; j < remote.length; j++) {
-        if (remote[j] && String(remote[j].ticketId) === id) remoteHit = remote[j];
+        if (remote[j] && String(remote[j].ticketId) === id) {
+          return Object.assign({}, remote[j], {
+            messages: threadMessages(id),
+          });
+        }
       }
-      if (remoteHit) {
-        return Object.assign({}, local || {}, remoteHit, {
-          status: remoteHit.status,
-          statusLabel: remoteHit.statusLabel,
-          messages: threadMessages(id).length
-            ? threadMessages(id)
-            : (local && local.messages) || [],
-        });
-      }
-      if (local) return local;
       if (threadMessages(id).length || confirmationByTicket[id]) {
         return {
           ticketId: id,
@@ -1721,7 +1621,6 @@
       pendingSubject = "";
       skipIdentityFields = false;
       if (descriptionInput) descriptionInput.value = "";
-      saveChatHistory([]);
       addBubble("bot", config.welcome);
     }
 
@@ -1861,8 +1760,7 @@
       });
     }
 
-    function addBubble(role, text, options) {
-      var skipPersist = options && options.skipPersist;
+    function addBubble(role, text) {
       var row = document.createElement("div");
       row.className = "desk-cw-row " + role;
       var bubble = document.createElement("p");
@@ -1871,7 +1769,6 @@
       row.appendChild(bubble);
       chatEl.appendChild(row);
       scrollChatToBottom();
-      if (!skipPersist) appendChatHistory(role, text);
     }
 
     function syncComposerForView() {
@@ -1893,12 +1790,20 @@
           : "Reply to the team...";
         input.disabled = resolved;
         sendBtn.disabled = resolved;
-        if (attachLabel) attachLabel.classList.toggle("is-disabled", resolved);
+        if (attachLabel) {
+          attachLabel.classList.toggle("is-reply", !resolved);
+          attachLabel.classList.toggle("is-disabled", resolved);
+        }
+        if (filesEl) filesEl.classList.toggle("is-reply", !resolved);
       } else {
         input.placeholder = "Type a message...";
         input.disabled = false;
         sendBtn.disabled = false;
-        if (attachLabel) attachLabel.classList.remove("is-disabled");
+        if (attachLabel) {
+          attachLabel.classList.remove("is-reply");
+          attachLabel.classList.remove("is-disabled");
+        }
+        if (filesEl) filesEl.classList.remove("is-reply");
       }
     }
 
@@ -1945,7 +1850,6 @@
       if (closedActions) {
         closedActions.classList.toggle("open", isTicketDetail && isResolved);
       }
-      if (poweredEl) poweredEl.classList.toggle("open", isTicketDetail);
       backBtn.style.display =
         isTicket || isTicketsList || isTicketDetail ? "inline-flex" : "none";
       avatar.style.display = "inline-flex";
