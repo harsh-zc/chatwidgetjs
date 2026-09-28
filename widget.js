@@ -788,6 +788,7 @@
     var preferMagicRoutes = false;
     var pendingFiles = [];
     var hubSocket = null;
+    var hubNegotiating = false;
     var hubInvokeId = 0;
     var hubStopped = false;
     var fileInput = document.getElementById("desk-cw-file");
@@ -1143,18 +1144,8 @@
       } catch (e) {}
     }
 
-    function ensureRealtime() {
-      if (hubStopped || hubSocket || !config.apiBaseUrl || !config.chatWidgetId) return;
-      if (typeof WebSocket === "undefined") return;
-      var sessionId = getOrCreateSessionId();
-      if (!sessionId) return;
-      var origin = deskOriginFromApiBase(config.apiBaseUrl);
-      var hubPath = origin + "/realtime/chat-widget";
-      var query =
-        "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) +
-        "&sessionId=" + encodeURIComponent(sessionId) +
-        "&X-Desk-Chat-Session=" + encodeURIComponent(sessionId);
-      var wsUrl = hubPath.replace(/^http/i, "ws") + "?" + query;
+    function openHubSocket(wsUrl) {
+      if (hubStopped || hubSocket || typeof WebSocket === "undefined" || !wsUrl) return;
       var socket;
       try {
         socket = new WebSocket(wsUrl);
@@ -1199,6 +1190,56 @@
           window.setTimeout(function () { ensureRealtime(); }, 2000);
         }
       };
+    }
+
+    function ensureRealtime() {
+      if (hubStopped || hubSocket || hubNegotiating || !config.apiBaseUrl || !config.chatWidgetId) return;
+      if (typeof WebSocket === "undefined") return;
+      var sessionId = getOrCreateSessionId();
+      if (!sessionId) return;
+      var origin = deskOriginFromApiBase(config.apiBaseUrl);
+      var hubPath = origin + "/realtime/chat-widget";
+      var query =
+        "chatWidgetId=" + encodeURIComponent(config.chatWidgetId) +
+        "&sessionId=" + encodeURIComponent(sessionId);
+      var negotiateUrl = hubPath + "/negotiate?" + query + "&negotiateVersion=1";
+      hubNegotiating = true;
+      publicFetch(negotiateUrl, { method: "POST" })
+        .then(function (res) {
+          return res.json().then(function (body) {
+            return { ok: res.ok, body: body };
+          }).catch(function () {
+            return { ok: false, body: null };
+          });
+        })
+        .then(function (result) {
+          hubNegotiating = false;
+          if (hubStopped || hubSocket) return;
+          if (!result.ok || !result.body) {
+            window.setTimeout(function () { ensureRealtime(); }, 2000);
+            return;
+          }
+          var neg = result.body;
+          var token = neg.connectionToken || neg.connectionId || "";
+          var wsUrl = "";
+          if (neg.url) {
+            wsUrl = String(neg.url);
+            if (neg.accessToken) {
+              wsUrl += (wsUrl.indexOf("?") >= 0 ? "&" : "?") + "access_token=" + encodeURIComponent(neg.accessToken);
+            }
+          } else if (token) {
+            wsUrl = hubPath.replace(/^http/i, "ws") + "?id=" + encodeURIComponent(token) + "&" + query;
+          }
+          if (!wsUrl) {
+            window.setTimeout(function () { ensureRealtime(); }, 2000);
+            return;
+          }
+          openHubSocket(wsUrl);
+        })
+        .catch(function () {
+          hubNegotiating = false;
+          if (!hubStopped) window.setTimeout(function () { ensureRealtime(); }, 2000);
+        });
     }
 
     function renderPendingFiles() {
