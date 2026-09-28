@@ -1538,17 +1538,9 @@
         var attachmentHtml = "";
         var attachments = msg.attachments || [];
         if (attachments.length) {
-          var visibleFiles = [];
-          for (var v = 0; v < attachments.length; v++) {
-            var candidate = attachments[v] || {};
-            var candidateName = String(candidate.fileName || candidate.name || "");
-            if (candidate.isInline || /^inline-/i.test(candidateName)) continue;
-            visibleFiles.push(candidate);
-          }
-          if (visibleFiles.length) {
           attachmentHtml = '<div class="desk-cw-thread-files">';
-          for (var a = 0; a < visibleFiles.length; a++) {
-            var file = visibleFiles[a] || {};
+          for (var a = 0; a < attachments.length; a++) {
+            var file = attachments[a] || {};
             var fileName = String(file.fileName || file.name || file.FileName || "Attachment");
             var fileUrl = resolveAttachmentUrl(file.url || "");
             attachmentHtml +=
@@ -1561,7 +1553,6 @@
               "</button>";
           }
           attachmentHtml += "</div>";
-          }
         }
         html +=
           '<div class="desk-cw-thread-msg ' +
