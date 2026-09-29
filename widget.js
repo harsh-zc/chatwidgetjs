@@ -698,14 +698,14 @@
       '<div id="desk-cw-resolve-actions">' +
       '<button type="button" id="desk-cw-resolve">Mark resolved</button>' +
       '<button type="button" id="desk-cw-resolve-cancel">Cancel</button>' +
-      '<button type="button" id="desk-cw-resolve-close">Close</button>' +
+      '<button type="button" id="desk-cw-resolve-close">Confirm</button>' +
       "</div>" +
-      '<button type="button" id="desk-cw-tickets-btn" aria-label="My requests" title="My requests">' + TICKETS_ICON + '<span id="desk-cw-ticket-count"></span></button>' +
+      '<button type="button" id="desk-cw-tickets-btn" aria-label="My Tickets" title="My Tickets">' + TICKETS_ICON + '<span id="desk-cw-ticket-count"></span></button>' +
       "</header>" +
       '<div id="desk-cw-chat"></div>' +
       '<div id="desk-cw-tickets-list">' +
       '<div class="desk-cw-tickets-toolbar">' +
-      '<p id="desk-cw-tickets-heading">My requests</p>' +
+      '<p id="desk-cw-tickets-heading">My Tickets</p>' +
       '<button type="button" id="desk-cw-tickets-new">' + PLUS_ICON + "New</button>" +
       "</div>" +
       '<div id="desk-cw-tickets-items"></div>' +
@@ -771,6 +771,7 @@
     var pendingSubject = "";
     var skipIdentityFields = false;
     var closingConfirm = false;
+    var pinTicketsScrollTop = false;
     var selectedTicketId = null;
     var widgetTitle = config.title;
     var widgetTagline = config.tagline;
@@ -936,12 +937,12 @@
       if (!count) {
         badge.textContent = "";
         badge.className = "";
-        if (ticketsBtn) ticketsBtn.setAttribute("aria-label", "My requests");
+        if (ticketsBtn) ticketsBtn.setAttribute("aria-label", "My Tickets");
         return;
       }
       badge.textContent = count > 99 ? "99+" : String(count);
       badge.className = "on";
-      if (ticketsBtn) ticketsBtn.setAttribute("aria-label", "My requests, " + count);
+      if (ticketsBtn) ticketsBtn.setAttribute("aria-label", "My Tickets, " + count);
     }
 
     function refreshSessionConversations() {
@@ -1515,12 +1516,13 @@
 
     function renderTicketsList() {
       if (!ticketsItemsEl) return;
-      if (ticketsHeadingEl) ticketsHeadingEl.textContent = "My requests";
+      if (ticketsHeadingEl) ticketsHeadingEl.textContent = "My Tickets";
       if (ticketsNewBtn) ticketsNewBtn.style.display = "inline-flex";
       var list = visibleTickets();
       if (!list.length) {
         ticketsItemsEl.innerHTML =
           '<p id="desk-cw-tickets-empty">No requests yet. Send a message to start one.</p>';
+        if (pinTicketsScrollTop && ticketsListEl) ticketsListEl.scrollTop = 0;
         return;
       }
       ticketsItemsEl.innerHTML = list
@@ -1559,6 +1561,7 @@
           openTicketChat(id);
         });
       }
+      if (pinTicketsScrollTop && ticketsListEl) ticketsListEl.scrollTop = 0;
     }
 
     function resolveAttachmentUrl(url) {
@@ -1911,8 +1914,9 @@
       if (titleEl) titleEl.textContent = (detailTicket && detailTicket.subject) || "Ticket";
       if (taglineEl) {
         var numberLabel = formatTicketNumber(detailTicket && detailTicket.ticketNumber);
-        var statusLabel = isResolved ? "Resolved" : "With our team";
-        taglineEl.textContent = [numberLabel, statusLabel].filter(Boolean).join(" · ");
+        taglineEl.textContent = isResolved
+          ? [numberLabel, "Resolved"].filter(Boolean).join(" · ")
+          : numberLabel;
       }
       syncResolveHeaderActions(detailTicket);
       syncComposerForView();
@@ -1958,10 +1962,9 @@
           var numberLabel = formatTicketNumber(
             detailTicket && detailTicket.ticketNumber,
           );
-          var statusLabel = isResolved ? "Resolved" : "With our team";
-          taglineEl.textContent = [numberLabel, statusLabel]
-            .filter(Boolean)
-            .join(" · ");
+          taglineEl.textContent = isResolved
+            ? [numberLabel, "Resolved"].filter(Boolean).join(" · ")
+            : numberLabel;
         }
         syncResolveHeaderActions(detailTicket);
         renderTicketThread(selectedTicketId);
@@ -1986,8 +1989,13 @@
         selectedTicketId = null;
         if (titleEl) titleEl.textContent = widgetTitle;
         if (taglineEl) taglineEl.textContent = widgetTagline;
+        pinTicketsScrollTop = true;
         renderTicketsList();
-        refreshSessionConversations();
+        if (ticketsListEl) ticketsListEl.scrollTop = 0;
+        refreshSessionConversations().then(function () {
+          if (view === "tickets" && ticketsListEl) ticketsListEl.scrollTop = 0;
+          pinTicketsScrollTop = false;
+        });
       } else {
           selectedTicketId = null;
           if (titleEl) titleEl.textContent = widgetTitle;
@@ -2141,10 +2149,8 @@
     launcher.addEventListener("click", function () { setOpen(!open); });
     backBtn.addEventListener("click", function () {
       if (view === "ticket-detail") {
-        selectedTicketId = null;
         closingConfirm = false;
-        resetMainChat();
-        setView("chat");
+        setView("tickets");
         return;
       }
       if (view === "ticket") {
